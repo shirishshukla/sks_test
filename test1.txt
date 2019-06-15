@@ -1,0 +1,37 @@
+class mytest1(
+$jndi_name        = undef,
+$pool_name        = undef,
+$enabled          = undef,
+$use_java_context = undef,
+$connection_url   = undef,
+$driver           = undef,
+$user_name        = undef,
+$password         = undef
+) {
+
+if $jndi_name and $pool_name and $enabled and $use_java_context and $connection_url and $driver and $user_name and $password {
+
+  $toFile = '/tmp/iws-standalone-full-ha_prime_source.xml'
+  $varsArgs = "$toFile $jndi_name $pool_name $enabled $use_java_context $connection_url $driver $user_name $password"
+
+  #file{ $toFile:
+  #  source => "puppet:///modules/${module_name}/iws-standalone-full-ha_prime_source.xml",
+  #  notify => File["/tmp/iws-standalone-full-ha_prime_source_update.sh"]
+  #}
+
+  file { "/tmp/iws-standalone-full-ha_prime_source_update.sh":
+    source => "puppet:///modules/${module_name}/iws-standalone-full-ha_prime_source_update.sh",
+    mode   => '0755',
+  }
+
+  exec { "Run Script with $varsArgs":
+    command     => "/tmp/iws-standalone-full-ha_prime_source_update.sh $varsArgs",
+    unless      => "grep -i \"jndi-name=.*.${jndi_name} \" $toFile"
+  }
+} else {
+  fail("Please provide all variablesi.")
+}
+
+}
+
+## END ##
