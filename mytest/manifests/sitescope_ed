@@ -1,0 +1,69 @@
+###  
+$ACTION="$env:Action"
+$DATACENTER=if ($env:DataCenter) {$env:DataCenter} else { "OLB-Mobile" }
+$SERVICEGROUP=if ($env:ServiceGroup) {$env:ServiceGroup} else { "EP" }
+$GROUPS="$env:Groups"
+$SERVERS="$env:Servers"
+$SITESCOPEUSR="$env:SiteScopeUser" 
+$SITESCOPEPSW="$env:SiteScopePassword" 
+$APIDIR='C:\SiteScopeAPIExamples\bin' 
+$SITESCOPESRV="10.127.198.131" 
+$SITESCOPEPORT="8080"
+#$MONITORPATH="Internet Channel/OLB-Mobile/EP/Web/"
+$MONITORPATH="Internet Channel/$DATACENTER/$SERVICEGROUP"
+
+Write-Host "$ACTION -> $GROUPS -> $SERVERS" 
+ 
+function enable_diable_monitor ($MODE, $GRP) {
+
+	try {
+	
+		Set-Location -Path $APIDIR 
+
+		if ( $ACTION -eq 'disable' ) { 
+			$ACTIONDESC="Disable Monitoring"
+			$ACTIONCMD='disable_group'
+		} else 	{
+			$ACTIONDESC="Enable Monitoring"
+			$GROUPS='enable_group' 
+		} 
+		
+		Write-Host "$ACTIONDESC for $MODE $GRP"
+		
+		$searchGroupObjPath="$MONITORPATH/$GROUPS/$GRP"
+		cmd /c "$ACTIONCMD.bat"  -host $SITESCOPESRV -port $SITESCOPEPORT -useSSL false -login $SITESCOPEUSR -password $SITESCOPEPSW -groupPath $searchGroupObjPath 
+		
+	} catch {
+		write-host "$ACTIONDESC for $MODE $GRP, Failed with error: $_"
+	}
+	
+}
+ 
+if ( Test-Path $APIDIR )
+{ 
+	if ($SERVERS) {
+	    Write-Host "Disable Servers: $SERVERS"
+		$SERVERS=$SERVERS.replace(' ','').split(',') 
+        foreach($SERVER in $SERVERS)
+        { 
+			enable_diable_monitor "Server" "$SERVER"
+		}
+	}
+	
+    elsif ($GROUPS) {
+	    Write-Host "Disable Groups: $GROUPS"
+		$GROUPS=$GROUPS.replace(' ','').split(',') 
+        foreach($GROUP in $GROUPS)
+        { 
+			enable_diable_monitor "Group" "$GROUP"
+		}
+	} 
+	
+	else {
+		Write-Host "Noting to do!!"
+	}
+	
+} else {
+   write-host "Not present $APIDIR"
+}
+## END ##  
