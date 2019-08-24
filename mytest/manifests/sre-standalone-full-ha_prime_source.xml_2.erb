@@ -145,8 +145,44 @@
 
 <!-- This is a Sub-Class on archive_standalone_sre.pp to Create a New DATASOURCES AND SECURITY_DOMAIN  By Passing formm console --!>
 <!-- This is a Optinal Configuration, We can enable this by datasource**_enabled Parameeter in Sub-Class --!>
-          <datasources>
-          </datasources>
+        <datasources>
+           <% if defined?(@datasources)
+		       @datasources.each do | k,v | %>
+		    <!-- <%= k %> --!>
+			<datasource jta="true" jndi-name="<%= v['jndi_name'] %>" pool-name="<%= v['pool_name'] %>" enabled="true" use-ccm="true" statistics-enabled="false">
+				<connection-url><%= v['connection_url'] %></connection-url>
+				<driver-class>oracle.jdbc.OracleDriver</driver-class>
+				<driver><%= v['driver'] %></driver>
+				<pool>
+					<min-pool-size><%= v['min_pool_size'] %></min-pool-size>
+					<max-pool-size><%= v['max_pool_size'] %></max-pool-size>
+				</pool>
+				<security>
+					<security-domain><%= v['security_domain'] %></security-domain>
+				</security>
+				<validation>
+					<valid-connection-checker class-name="org.jboss.jca.adapters.jdbc.extensions.oracle.OracleValidConnectionChecker"/>
+					<check-valid-connection-sql>SELECT 1 FROM DUAL</check-valid-connection-sql>
+					<validate-on-match>true</validate-on-match>
+					<background-validation>false</background-validation>
+					<background-validation-millis>100</background-validation-millis>
+					<exception-sorter class-name="org.jboss.jca.adapters.jdbc.extensions.oracle.OracleExceptionSorter"/>
+				</validation>
+				<timeout>
+					<set-tx-query-timeout>false</set-tx-query-timeout>
+					<blocking-timeout-millis>0</blocking-timeout-millis>
+					<idle-timeout-minutes>5</idle-timeout-minutes>
+					<query-timeout>0</query-timeout>
+					<use-try-lock>0</use-try-lock>
+					<allocation-retry>0</allocation-retry>
+					<allocation-retry-wait-millis>0</allocation-retry-wait-millis>
+				</timeout>
+				<statement>
+					<share-prepared-statements>false</share-prepared-statements>
+				</statement>
+			</datasource>
+		<% end; end -%>
+        </datasources>
         </subsystem>
         <subsystem xmlns="urn:jboss:domain:deployment-scanner:2.0">
             <deployment-scanner path="deployments" relative-to="jboss.server.base.dir" scan-interval="5000" runtime-failure-causes-rollback="${jboss.deployment.scanner.rollback.on.failure:false}"/>
@@ -417,11 +453,22 @@
                         </login-module-stack>
                         <auth-module code="Dummy"/>
                     </authentication-jaspi>
-                  </security-domain>
-
+                </security-domain>
+			<% if defined?(@datasources)
+			   @datasources.each do | k,v | %>
+			   <!-- <%= k %> --!>
+				<security-domain name="DS_QAJTS_RW_DOMAIN">
+					<authentication>
+						<login-module code="org.picketbox.datasource.security.SecureIdentityLoginModule" flag="required">
+							<module-option name="username" value="<%= v['username'] %>"/>
+							<module-option name="password" value="<%= v['password'] %>"/>
+						</login-module>
+					</authentication>
+				</security-domain>
+			<% end; end -%> 
 <!-- This is a Sub-Class on archive_standalone_sre.pp to Manage SECURITY_DOMAIN By Passing formm console --!>
 <!-- This is a Optinal Configuration, We can enable this by datasource**_enabled Parameeter in Sub-Class --!>
-                  </security-domains>
+            </security-domains>
         </subsystem>
         <subsystem xmlns="urn:jboss:domain:singleton:1.0">
             <singleton-policies default="default">
