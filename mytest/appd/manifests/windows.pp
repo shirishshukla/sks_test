@@ -3,37 +3,37 @@
 ##
 
 class appd_agent::windows(
-  $app_name                       = $appd_agent::app_name,
-  $tier_name                      = $appd_agent::tier_name,
-  $controller_host                = $appd_agent::controller_host,
-  $controller_port                = $appd_agent::controller_port,
-  $controller_ssl_enabled          = $appd_agent::controller_ssl_enabled,
-  $orchestration_enabledd          = $appd_agent::orchestration_enabledd,
-  $account_name                   = $appd_agent::account_name,
-  $account_acces_key               = $appd_agent::account_acces_key,
-  $sim_enabled                    = $appd_agent::sim_enabled,
-  $win_drive_letter               = $appd_agent::win_drive_letter,
-  $win_binary_dir                 = $appd_agent::win_binary_dir,
-  $win_app_agent_install_dir        = $appd_agent::win_app_agent_install_dir,
-  $win_app_agent_binary_file        = $appd_agent::win_app_agent_binary_file,
-  $win_machine_agent_install_dir    = $appd_agent::win_machine_agent_install_dir,
-  $win_machine_agent_install_binary = $appd_agent::win_machine_agent_install_binary
+  $app_name                          = $appd_agent::app_name,
+  $tier_name                         = $appd_agent::tier_name,
+  $controller_host                   = $appd_agent::controller_host,
+  $controller_port                   = $appd_agent::controller_port,
+  $controller_ssl_enabled            = $appd_agent::controller_ssl_enabled,
+  $orchestration_enabledd            = $appd_agent::orchestration_enabledd,
+  $account_name                      = $appd_agent::account_name,
+  $account_acces_key                 = $appd_agent::account_acces_key,
+  $sim_enabled                       = $appd_agent::sim_enabled,
+  $win_drive_letter                  = $appd_agent::win_drive_letter,
+  $win_binary_dir                    = $appd_agent::win_binary_dir,
+  $win_app_agent_install_dir         = $appd_agent::win_app_agent_install_dir,
+  $win_app_agent_binary_file         = $appd_agent::win_app_agent_binary_file,
+  $win_machine_agent_install_dir     = $appd_agent::win_machine_agent_install_dir,
+  $win_machine_agent_install_binary  = $appd_agent::win_machine_agent_install_binary
 ) {
 
   # Validate Drive exist ?
   validate_absolute_path("${win_drive_letter}:\\")
 
   # Binary Directory 
-  $msi_name                   = $win_app_agent_binary_file.split('-')[0]
+  $msi_name                       = $win_app_agent_binary_file.split('-')[0]
   $msi_version                    = regsubst($win_app_agent_binary_file.split('-')[1], '^(.+)\.msi$', '\1')
-  $binary_dir                 = "${win_drive_letter}:\\${win_binary_dir}"
-  $msi_file_path               = "${binary_dir}\\${win_app_agent_binary_file}"
-  $msi_agent_installer_log_file  = "${binary_dir}\\AgentInstaller.log"
-  $app_agent_install_dir        = "${binary_dir}\\${win_app_agent_install_dir}"
-  $app_dotnet_agent_folder = "${binary_dir}\\${win_app_agent_install_dir}"
-  $ad_config_file            = "${binary_dir}\\AD_Config.xml"
-  $machine_agent_install_dir    = "${binary_dir}\\${win_machine_agent_install_dir}"
-  $machine_agent_binary_file    = "${binary_dir}\\${win_machine_agent_install_binary}"
+  $binary_dir                     = "${win_drive_letter}:\\${win_binary_dir}"
+  $msi_file_path                  = "${binary_dir}\\${win_app_agent_binary_file}"
+  $msi_agent_installer_log_file   = "${binary_dir}\\AgentInstaller.log"
+  $app_agent_install_dir          = "${binary_dir}\\${win_app_agent_install_dir}"
+  $app_dotnet_agent_folder        = "${binary_dir}\\${win_app_agent_install_dir}"
+  $ad_config_file                 = "${binary_dir}\\AD_Config.xml"
+  $machine_agent_install_dir      = "${binary_dir}\\${win_machine_agent_install_dir}"
+  $machine_agent_binary_file      = "${binary_dir}\\${win_machine_agent_install_binary}"
 
   # Create Directory
   $appd_agent_dirs = unique([ $binary_dir, $app_agent_install_dir, $app_dotnet_agent_folder ])
@@ -60,8 +60,8 @@ class appd_agent::windows(
 
   # Copy APP Agent MSI FILE
   file { $msi_file_path:
-    source => "puppet:///modules/${module_name}/${win_app_agent_binary_file}",
-  require  => File[$appd_agent_dirs]
+    source  => "puppet:///modules/${module_name}/${win_app_agent_binary_file}",
+    require => File[$appd_agent_dirs]
   }
 
   package { 'AppDynamics .NET Agent':

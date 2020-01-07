@@ -3,25 +3,33 @@
 ##
 
 class appd_agent::linux (
-  $app_name              = $appd_agent::app_name,
-  $tier_name             = $appd_agent::tier_name,
-  $controller_host       = $appd_agent::controller_host,
-  $controller_port       = $appd_agent::controller_port,
-  $controller_ssl_enabled = $appd_agent::controller_ssl_enabled,
-  $account_name          = $appd_agent::account_name,
-  $account_acces_key      = $appd_agent::account_acces_key,
-  $sim_enabled           = $appd_agent::sim_enabled,
-  $orchestration_enabledd = $appd_agent::orchestration_enabledd,
-  $app_install_binary     = $appd_agent::app_install_binary,
-  $machine_install_binary = $appd_agent::machine_install_binary,
-  $base_appd_dir          = $appd_agent::base_appd_dir,
-  $app_install_dir        = $appd_agent::app_install_dir,
-  $app_agent_owner        = $appd_agent::app_agent_owner,
-  $app_agent_group        = $appd_agent::app_agent_group,
-  $machine_install_dir    = $appd_agent::machine_install_dir,
-  $machine_agent_owner    = $appd_agent::machine_agent_owner,
-  $machine_agent_group    = $appd_agent::machine_agent_group
+  $app_name                    = $appd_agent::app_name,
+  $tier_name                   = $appd_agent::tier_name,
+  $controller_host             = $appd_agent::controller_host,
+  $controller_port             = $appd_agent::controller_port,
+  $controller_ssl_enabled      = $appd_agent::controller_ssl_enabled,
+  $account_name                = $appd_agent::account_name,
+  $account_acces_key           = $appd_agent::account_acces_key,
+  $sim_enabled                 = $appd_agent::sim_enabled,
+  $orchestration_enabledd      = $appd_agent::orchestration_enabledd,
+  $app_agent_binary            = $appd_agent::app_agent_binary,
+  $machine_agent_binary        = $appd_agent::machine_agent_binary,
+  $base_appd_dir               = $appd_agent::base_appd_dir,
+  $app_agent_install_dir       = $appd_agent::app_agent_install_dir,
+  $app_agent_owner             = $appd_agent::app_agent_owner,
+  $app_agent_group             = $appd_agent::app_agent_group,
+  $machine_agent_install_dir   = $appd_agent::machine_agent_install_dir,
+  $machine_agent_owner         = $appd_agent::machine_agent_owner,
+  $machine_agent_group         = $appd_agent::machine_agent_group
 ) {
+
+  ## Variables 
+  $fileserver                   = 'fileserver/appd'
+  $app_agent_binary_source      = "puppet:///${fileserver}/${app_agent_binary}"     # lint:ignore:puppet_url_without_modules
+  $machine_agent_binary_source  = "puppet:///${fileserver}/${machine_agent_binary}" # lint:ignore:puppet_url_without_modules
+  $app_controller_info_file     = "${app_agent_install_dir}/conf/controller-info.xml"
+  $machine_controller_info_file = "${machine_agent_install_dir}/conf/controller-info.xml"
+  $machine_agent_sysconfig_file = '/etc/sysconfig/appdynamics-machine-agent'
 
   ## Create recurse $base_appd_dir
   exec { "Create ${base_appd_dir}":
@@ -31,25 +39,24 @@ class appd_agent::linux (
   } -> file { $base_appd_dir:  }
 
   ## Install App Agent 
-  $app_controller_info_file = "${app_install_dir}/conf/controller-info.xml"
   # Create Dir 
-  file {$app_install_dir:
-  ensure => directory,
-  owner  => $app_agent_owner,
-  group  => $app_agent_group
+  file {$app_agent_install_dir:
+    ensure => directory,
+    owner  => $app_agent_owner,
+    group  => $app_agent_group
   }
 
   # Extract Binary  
-  archive { $app_install_dir:
-    path         => "${app_install_dir}/${app_install_binary}",
-    source       => "puppet:///modules/${module_name}/${app_install_binary}",
+  archive { $app_agent_install_dir:
+    path         => "${app_agent_install_dir}/${app_agent_binary}",
+    source       => $app_agent_binary_source,
     extract      => true,
-    extract_path => $app_install_dir,
+    extract_path => $app_agent_install_dir,
     user         => $app_agent_owner,
     group        => $app_agent_group,
     cleanup      => true,
     creates      => $app_controller_info_file,
-    require      => File[$app_install_dir]
+    require      => File[$app_agent_install_dir]
   }
 
   # Set controller config file 
@@ -68,31 +75,28 @@ class appd_agent::linux (
         'node_name'              => $facts['hostname']
       }
     ),
-    require => Archive[$app_install_dir]
+    require => Archive[$app_agent_install_dir]
   }
 
-  #### Machine Agent 
-  $machine_controller_info_file = "${machine_install_dir}/conf/controller-info.xml"
-  $machine_agent_sysconfig_file = '/etc/sysconfig/appdynamics-machine-agent'
-
+  #### Machine Agent
   # Create Dir 
-  file {$machine_install_dir:
+  file {$machine_agent_install_dir:
     ensure => directory,
     owner  => $machine_agent_owner,
     group  => $machine_agent_group
   }
 
   # Extract Binary  
-  archive { $machine_install_dir:
-    path         => "${machine_install_dir}/${machine_install_binary}",
-    source       => "puppet:///modules/${module_name}/${machine_install_binary}",
+  archive { $machine_agent_install_dir:
+    path         => "${machine_agent_install_dir}/${machine_agent_binary}",
+    source       => $machine_agent_binary_source,
     extract      => true,
-    extract_path => $machine_install_dir,
+    extract_path => $machine_agent_install_dir,
     user         => $machine_agent_owner,
     group        => $machine_agent_group,
     cleanup      => true,
     creates      => $machine_controller_info_file,
-    require      => File[$machine_install_dir]
+    require      => File[$machine_agent_install_dir]
   }
 
   # Set controller config file 
@@ -109,7 +113,7 @@ class appd_agent::linux (
         'sim_enabled'            => $sim_enabled,
       }
     ),
-    require => Archive[$machine_install_dir],
+    require => Archive[$machine_agent_install_dir],
   }
 
   # Setup machine-agent sysconfig file 
@@ -117,17 +121,17 @@ class appd_agent::linux (
     ensure  => 'file',
     content => epp("${module_name}/machine_agent_sysconfig.epp",
       {
-        'machine_agent_install_dir' => $machine_install_dir,
+        'machine_agent_install_dir' => $machine_agent_install_dir,
         'machine_agent_owner'       => $machine_agent_owner,
         'machine_agent_group'       => $machine_agent_group
       }
     ),
-    require => Archive[$machine_install_dir],
+    require => Archive[$machine_agent_install_dir],
   }
 
   # Machine Agent daemon service file
   File { '/etc/init.d/appdynamics-machine-agent':
-    source  => "${machine_install_dir}/etc/init.d/appdynamics-machine-agent",
+    source  => "${machine_agent_install_dir}/etc/init.d/appdynamics-machine-agent",
     mode    => '0755',
     require => File['/etc/sysconfig/appdynamics-machine-agent']
   }
@@ -136,7 +140,7 @@ class appd_agent::linux (
   service { 'appdynamics-machine-agent':
     ensure  => running,
     enable  => true,
-    #provider   => 'init',
+    #provider => 'init',
     require => File['/etc/init.d/appdynamics-machine-agent']
   }
 
