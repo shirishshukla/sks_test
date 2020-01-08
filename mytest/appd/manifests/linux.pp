@@ -30,7 +30,8 @@ class appd_agent::linux (
   $app_controller_info_file     = "${app_agent_install_dir}/conf/controller-info.xml"
   $machine_controller_info_file = "${machine_agent_install_dir}/conf/controller-info.xml"
   $machine_agent_sysconfig_file = '/etc/sysconfig/appdynamics-machine-agent'
-
+  $app_agent_version            = regsubst($app_agent_binary.split('-')[-1], '^(.+)\.zip$', '\1')
+  $machine_agent_version        = regsubst($machine_agent_binary.split('-')[-1], '^(.+)\.zip$', '\1')
   ## Create recurse $base_appd_dir
   exec { "Create ${base_appd_dir}":
     creates => $base_appd_dir,
@@ -39,24 +40,43 @@ class appd_agent::linux (
   } -> file { $base_appd_dir:  }
 
   ## Install App Agent 
-  # Create Dir 
-  file {$app_agent_install_dir:
-    ensure => directory,
-    owner  => $app_agent_owner,
-    group  => $app_agent_group
+  if $facts['lfg_appdynamics_java_agent_version'] != undef {
+    $old_version = $facts['lfg_appdynamics_java_agent_version']
+  } else {
+    $old_version = $app_agent_version # make them the same so you dont need to backup; versioncmp() will return 0 since equal
   }
 
-  # Extract Binary  
-  archive { $app_agent_install_dir:
-    path         => "${app_agent_install_dir}/${app_agent_binary}",
-    source       => $app_agent_binary_source,
-    extract      => true,
-    extract_path => $app_agent_install_dir,
-    user         => $app_agent_owner,
-    group        => $app_agent_group,
-    cleanup      => true,
-    creates      => $app_controller_info_file,
-    require      => File[$app_agent_install_dir]
+  $_version     = regsubst($app_agent_version, '(^\d+\.\d+\.\d+).*$', '\1')     # Don't care about the patch level
+  $_old_version = regsubst($old_version, '(^\d+\.\d+\.\d+).*$', '\1')           # Don't care about the patch level
+
+  if versioncmp($_version, $_old_version) > 0 {   # Need to upgrade, so backup
+    exec { "Backup AppD JavaAgent ${old_version}":
+      command => "test -d ${app_agent_install_dir} && mv ${app_agent_install_dir} ${app_agent_install_dir}.${old_version}",
+      path    => ['/usr/sbin/','/usr/bin/','/bin', '/sbin']
+    }
+
+    # Create Dir `
+    file {$app_agent_install_dir:
+      ensure => directory,
+      owner  => $app_agent_owner,
+      group  => $app_agent_group
+    }
+
+    # Extract Binary  
+    archive { $app_agent_install_dir:
+      path         => "${app_agent_install_dir}/${app_agent_binary}",
+      source       => $app_agent_binary_source,
+      extract      => true,
+      extract_path => $app_agent_install_dir,
+      user         => $app_agent_owner,
+      group        => $app_agent_group,
+      cleanup      => true,
+      creates      => $app_controller_info_file,
+      require      => File[$app_agent_install_dir]
+    }
+
+  } elsif versioncmp($_version, $_old_version) < 0 { # Downgrading
+    fail("Downgrading isn't enabled.")
   }
 
   # Set controller config file 
@@ -79,24 +99,43 @@ class appd_agent::linux (
   }
 
   #### Machine Agent
-  # Create Dir 
-  file {$machine_agent_install_dir:
-    ensure => directory,
-    owner  => $machine_agent_owner,
-    group  => $machine_agent_group
+  if $facts['lfg_appdynamics_machine_agent_version'] != undef {
+    $old_version = $facts['lfg_appdynamics_machine_agent_version']
+  } else {
+    $old_version = $machine_agent_version # make them the same so you dont need to backup; versioncmp() will return 0 since equal
   }
 
-  # Extract Binary  
-  archive { $machine_agent_install_dir:
-    path         => "${machine_agent_install_dir}/${machine_agent_binary}",
-    source       => $machine_agent_binary_source,
-    extract      => true,
-    extract_path => $machine_agent_install_dir,
-    user         => $machine_agent_owner,
-    group        => $machine_agent_group,
-    cleanup      => true,
-    creates      => $machine_controller_info_file,
-    require      => File[$machine_agent_install_dir]
+  $_version     = regsubst($machine_agent_version, '(^\d+\.\d+\.\d+).*$', '\1')     # Don't care about the patch level
+  $_old_version = regsubst($old_version, '(^\d+\.\d+\.\d+).*$', '\1')               # Don't care about the patch level
+
+  if versioncmp($_version, $_old_version) > 0 {   # Need to upgrade, so backup
+    exec { "Backup AppD Machine Agent ${old_version}":
+      command => "test -d ${machine_agent_install_dir} && mv ${machine_agent_install_dir} ${machine_agent_install_dir}.${old_version}",
+      path    => ['/usr/sbin/','/usr/bin/','/bin', '/sbin',],
+    }
+
+    # Create Dir 
+    file {$machine_agent_install_dir:
+      ensure => directory,
+      owner  => $machine_agent_owner,
+      group  => $machine_agent_group
+    }
+
+    # Extract Binary  
+    archive { $machine_agent_install_dir:
+      path         => "${machine_agent_install_dir}/${machine_agent_binary}",
+      source       => $machine_agent_binary_source,
+      extract      => true,
+      extract_path => $machine_agent_install_dir,
+      user         => $machine_agent_owner,
+      group        => $machine_agent_group,
+      cleanup      => true,
+      creates      => $machine_controller_info_file,
+      require      => File[$machine_agent_install_dir]
+    }
+
+  } elsif versioncmp($_version, $_old_version) < 0 { # Downgrading
+    fail("Downgrading isn't enabled.")
   }
 
   # Set controller config file 
@@ -113,7 +152,7 @@ class appd_agent::linux (
         'sim_enabled'            => $sim_enabled,
       }
     ),
-    require => Archive[$machine_agent_install_dir],
+    require => Archive[$machine_agent_install_dir]
   }
 
   # Setup machine-agent sysconfig file 
