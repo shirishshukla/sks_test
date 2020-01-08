@@ -1,0 +1,11 @@
+---
+
+# clamav daemond
+clamav_daemon_state: started
+clamav_daemon_enabled: true
+
+# clamav-freshclam daemon 
+clamav_freshclam_daemon_state: started
+clamav_freshclam_daemon_enabled: true
+
+## END ## 
