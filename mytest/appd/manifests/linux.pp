@@ -3,6 +3,7 @@
 ##
 
 class appd_agent::linux (
+  $fileserver                  = $appd_agent::fileserver,
   $app_name                    = $appd_agent::app_name,
   $tier_name                   = $appd_agent::tier_name,
   $controller_host             = $appd_agent::controller_host,
@@ -12,9 +13,11 @@ class appd_agent::linux (
   $account_acces_key           = $appd_agent::account_acces_key,
   $sim_enabled                 = $appd_agent::sim_enabled,
   $orchestration_enabledd      = $appd_agent::orchestration_enabledd,
+  $db_agent_binary_file        = $appd_agent::db_agent_binary_file,
   $app_agent_binary            = $appd_agent::app_agent_binary,
   $machine_agent_binary        = $appd_agent::machine_agent_binary,
   $base_appd_dir               = $appd_agent::base_appd_dir,
+  $db_agent_install_dir        = $appd_agent::db_agent_install_dir,
   $app_agent_install_dir       = $appd_agent::app_agent_install_dir,
   $app_agent_owner             = $appd_agent::app_agent_owner,
   $app_agent_group             = $appd_agent::app_agent_group,
@@ -23,15 +26,33 @@ class appd_agent::linux (
   $machine_agent_group         = $appd_agent::machine_agent_group
 ) {
 
-  ## Variables 
-  $fileserver                   = 'fileserver/appd'
+  ## Fail if free space on /opt < 4000 MB
+  $opt_free_space = $facts['free_space_opt'].scanf('%d')[0]
+  if $opt_free_space < 4000 {
+    fail("Fail: free space on /opt is ${opt_free_space}M less than 4G")
+  }
+
+  ## Variables
+  # DB Agent 
+  #$installer_file_name          = "dbagent-${version}.zip"
+  #$installer_file_path          = "puppet:///${fileserver}/${db_agent_binary_file}" # lint:ignore:puppet_url_without_modules
+  #$install_directory            = '/opt/was/appdynamics/dbagent'
+  # Java Agent   
   $app_agent_binary_source      = "puppet:///${fileserver}/${app_agent_binary}"     # lint:ignore:puppet_url_without_modules
-  $machine_agent_binary_source  = "puppet:///${fileserver}/${machine_agent_binary}" # lint:ignore:puppet_url_without_modules
   $app_controller_info_file     = "${app_agent_install_dir}/conf/controller-info.xml"
+  # Machine Agent 
+  $machine_agent_binary_source  = "puppet:///${fileserver}/${machine_agent_binary}" # lint:ignore:puppet_url_without_modules
   $machine_controller_info_file = "${machine_agent_install_dir}/conf/controller-info.xml"
   $machine_agent_sysconfig_file = '/etc/sysconfig/appdynamics-machine-agent'
   $app_agent_version            = regsubst($app_agent_binary.split('-')[-1], '^(.+)\.zip$', '\1')
   $machine_agent_version        = regsubst($machine_agent_binary.split('-')[-1], '^(.+)\.zip$', '\1')
+
+  ## Install unzip package 
+  # Unzip package is required
+  package { 'unzip':
+    ensure => installed
+  }
+
   ## Create recurse $base_appd_dir
   exec { "Create ${base_appd_dir}":
     creates => $base_appd_dir,
@@ -39,9 +60,19 @@ class appd_agent::linux (
     path    => $::path
   } -> file { $base_appd_dir:  }
 
-  ## Install App Agent 
-  if $facts['lfg_appdynamics_java_agent_version'] != undef {
-    $old_version = $facts['lfg_appdynamics_java_agent_version']
+  ## Create  symlink pinting to $base_appd_dir
+  file {'/opt/AppDynamics':
+    ensure => link,
+    target => $base_appd_dir,
+    owner  => $app_agent_owner,
+    group  => $app_agent_group
+  }
+
+  #### Install DB Agent
+
+  #### Install App Agent 
+  if $facts['appdynamics_java_agent_version'] != undef {
+    $old_version = $facts['appdynamics_java_agent_version']
   } else {
     $old_version = $app_agent_version # make them the same so you dont need to backup; versioncmp() will return 0 since equal
   }
@@ -99,8 +130,8 @@ class appd_agent::linux (
   }
 
   #### Machine Agent
-  if $facts['lfg_appdynamics_machine_agent_version'] != undef {
-    $old_version = $facts['lfg_appdynamics_machine_agent_version']
+  if $facts['appdynamics_machine_agent_version'] != undef {
+    $old_version = $facts['appdynamics_machine_agent_version']
   } else {
     $old_version = $machine_agent_version # make them the same so you dont need to backup; versioncmp() will return 0 since equal
   }
