@@ -1,11 +1,51 @@
 ---
+# Dependency packages 
+clamav_dep_packages:
+  - build-essential
+  - gcc
+  - g++
+  - bzip2
+  - libxml2
+  - llvm
+  - curl
+  - libcurl4-openssl-dev
+  - libjson-c-dev
+  - openssl
+  - valgrind
 
-# clamav daemond
-clamav_daemon_state: started
-clamav_daemon_enabled: true
+# clamav version
+clamav_version: 0.102.1
+clamav_src_code_url: https://www.clamav.net/downloads/production/clamav-{{ clamav_version }}.tar.gz
+clamav_extract_temp_dir: /tmp/_clamav_temp
+clamav_install_dir: /usr/local/etc/clamav
 
-# clamav-freshclam daemon 
-clamav_freshclam_daemon_state: started
-clamav_freshclam_daemon_enabled: true
+# clamav.conf 
+clamav_localsocket: /var/run/clamav/clamd.ctl
+clamav_config_path: "{{ clamav_install_dir }}/clamd.conf"
+clamav_freshclam_config_path: "{{ clamav_install_dir }}/freshclam.conf"
 
-## END ## 
+
+# clamav.conf Changes 
+clamav_config_changes:
+  - regexp: '^.*Example$'
+    state: absent
+  - regexp: '^.*LocalSocket .*$'
+    line: 'LocalSocket {{ clamav_localsocket }}'
+
+# freshclam.conf Chnages 
+#clamav_freshclam_config_changes:
+
+# clamav scan dir
+clamav_scan_cmd: clamscan 
+clamav_scan_dir: /
+clamav_scan_options: -i
+clamav_scan_cron_min: 10
+clamav_scan_cron_hr: '*'
+
+# clamav update signature
+clamav_freshclam_cmd: freshclam
+clamav_freshclam_options: 
+clamav_freshclam_cron_min: 10
+clamav_freshclam_cron_hr: 3
+
+## END ##

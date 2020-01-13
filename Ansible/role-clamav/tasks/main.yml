@@ -1,27 +1,120 @@
+# https://www.clamav.net/documents/installation-on-debian-and-ubuntu-linux-distributions
 ---
 
-# include variables
-- name: Include Variables
-  include_vars: "{{ ansible_os_family }}.yml"
+# Install dependency packages
+- name: Install Dependency Packages
+  apt: name={{ clamav_dep_packages }} state=present update_cache=yes force=yes 
+  #ignore_errors: yes 
 
-# Install CalmAV package
-- name: Install CalmAV Packages
-  apt: name={{ item }} state=installed   update_cache=yes
-  with_items: "{{ clamav_packages }}"
-  register: pkgs_installed
+# Create Temp Dir 
+- name: Create temp dir 
+  file: path={{ clamav_extract_temp_dir }} state=directory 
+  
+# Extract Binary 
+- name: Unarchive clamav-{{ clamav_version }}.tar.gz 
+  unarchive:
+    src: "{{ clamav_src_code_url }}"
+    dest: "{{ clamav_extract_temp_dir }}"
+    creates: "{{ clamav_extract_temp_dir }}/clamav-{{ clamav_version }}/README.md"
+    remote_src: yes
+  register: unarchive_return
 
-# start and enable CalmAV daemon 
-- name: Start Enable {{ clamav_daemon_name }} daemon 
-  service:
-    name: "{{ clamav_daemon_name }}"
-    state: "{{ clamav_daemon_state }}"
-    enabled: "{{ clamav_daemon_enabled }}"
+- debug: msg="{{ unarchive_return }}"
+  
+# Install configure
+- name: configure
+  command: "./configure --sysconfdir={{ clamav_install_dir }}"
+  args:
+    chdir: "{{ clamav_extract_temp_dir }}/clamav-{{ clamav_version }}"
+  register: configure_return
+  when:
+    - unarchive_return.failed == false
+    - unarchive_return.changed == true
+    
+- debug: msg="{{ configure_return }}"
 
-# start enable ClamAV freshclam daemon
-- name: Start Enable {{ clamav_freshclam_daemon }} daemon 
-  service:
-    name: "{{ clamav_freshclam_daemon }}"
-    state: "{{ clamav_freshclam_daemon_state }}"
-    enabled: "{{ clamav_freshclam_daemon_enabled }}"
+# make 
+- name: make 
+  command: make -j2
+  args:
+    chdir: "{{ clamav_extract_temp_dir }}/clamav-{{ clamav_version }}"
+  register: make_return
+  when:
+    - configure_return.changed == true
+  
+- debug: msg="{{ make_return }}"
+  
+# make install
+- name: make install
+  command: make install
+  args:
+    chdir: "{{ clamav_extract_temp_dir }}/clamav-{{ clamav_version }}"
+  register: make_install_return
+  when:
+    - make_return.changed == true
+
+- debug: msg="{{ make_install_return }}"
+
+# Create Database directory
+- name: Create Databse Directory {{ clamav_install_dir }}/share/clamav
+  file: path="{{ clamav_install_dir }}/share/clamav" state=directory recurse=yes
+  when:
+    - make_install_return.skipped == true or make_install_return.changed == true
+
+# Copy Config files
+- name: copy clamav.conf
+  copy: src="{{ clamav_install_dir }}/{{ item }}.sample"  dest="{{ clamav_install_dir }}/{{ item }}" force=no remote_src=yes
+  with_items:
+    - clamd.conf
+    - freshclam.conf
+  when:
+    - make_install_return.skipped == true or make_install_return.changed == true 
+
+# Config Changes clamav.conf 
+- name: ClamAV config changes in clamav.conf 
+  lineinfile:
+    path: "{{ clamav_config_path }}"
+    regexp: '{{ item.regexp }}'
+    line: "{{ item.line | default('') }}"
+    state: "{{ item.state | default('present') }}"
+  with_items: "{{ clamav_config_changes }}"
+  when: 
+    - clamav_config_changes is defined 
+    - clamav_config_changes != ""
+  
+# Config Changes freshclam.conf 
+- name: ClamAV config changes in freshclam.conf 
+  lineinfile:
+    path: "{{ clamav_freshclam_config_path }}"
+    regexp: '{{ item.regexp }}'
+    line: "{{ item.line | default('') }}"
+    state: "{{ item.state | default('present') }}"
+  with_items: "{{ clamav_freshclam_config_changes }}"
+  when: 
+    - clamav_freshclam_config_changes is defined
+    - clamav_freshclam_config_changes != ""
+
+# Create Cron to run scan 
+- name: Cronjob to run Scan every hour HH:10 
+  cron:
+   name: "## Schedule clamAV scan"
+   minute: "{{ clamav_scan_cron_min }}"
+   hour: "{{ clamav_scan_cron_hr }}"
+   day: "*"
+   month: "*"
+   weekday: "*"
+   job: "{{ clamav_scan_cmd }} {{ clamav_scan_options }} {{ clamav_scan_dir }}"
+   
+# Create Cron to update signature
+- name: Cronjob to run update clamAV signature daily at 03:10 am  
+  cron:
+   name: "## update clamAV signature daily at 03:10 am"
+   minute: "{{ clamav_freshclam_cron_min }}"
+   hour: "{{ clamav_freshclam_cron_hr }}"
+   day: "*"
+   month: "*"
+   weekday: "*"
+   job: "{{ clamav_freshclam_cmd }} {{ clamav_freshclam_options }}"
+   disabled: no
 
 ## END ##

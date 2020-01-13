@@ -1,7 +1,0 @@
----
-
-- name: restart {{ clamav_daemon_name }} daemon
-  service:
-    name: "{{ clamav_daemon_name }}"
-    state: restarted
-  when:  daemon_calmav_state != 'stopped'
