@@ -13,11 +13,9 @@ class appd_agent::linux (
   $account_acces_key           = $appd_agent::account_acces_key,
   $sim_enabled                 = $appd_agent::sim_enabled,
   $orchestration_enabledd      = $appd_agent::orchestration_enabledd,
-  $db_agent_binary_file        = $appd_agent::db_agent_binary_file,
   $app_agent_binary            = $appd_agent::app_agent_binary,
   $machine_agent_binary        = $appd_agent::machine_agent_binary,
   $base_appd_dir               = $appd_agent::base_appd_dir,
-  $db_agent_install_dir        = $appd_agent::db_agent_install_dir,
   $app_agent_install_dir       = $appd_agent::app_agent_install_dir,
   $app_agent_owner             = $appd_agent::app_agent_owner,
   $app_agent_group             = $appd_agent::app_agent_group,
@@ -33,10 +31,6 @@ class appd_agent::linux (
   }
 
   ## Variables
-  # DB Agent 
-  #$installer_file_name          = "dbagent-${version}.zip"
-  #$installer_file_path          = "puppet:///${fileserver}/${db_agent_binary_file}" # lint:ignore:puppet_url_without_modules
-  #$install_directory            = '/opt/was/appdynamics/dbagent'
   # Java Agent   
   $app_agent_binary_source      = "puppet:///${fileserver}/${app_agent_binary}"     # lint:ignore:puppet_url_without_modules
   $app_controller_info_file     = "${app_agent_install_dir}/conf/controller-info.xml"
@@ -68,8 +62,6 @@ class appd_agent::linux (
     group  => $app_agent_group
   }
 
-  #### Install DB Agent
-
   #### Install App Agent 
   if $facts['appdynamics_java_agent_version'] != undef {
     $old_version = $facts['appdynamics_java_agent_version']
@@ -85,29 +77,28 @@ class appd_agent::linux (
       command => "test -d ${app_agent_install_dir} && mv ${app_agent_install_dir} ${app_agent_install_dir}.${old_version}",
       path    => ['/usr/sbin/','/usr/bin/','/bin', '/sbin']
     }
-
-    # Create Dir `
-    file {$app_agent_install_dir:
-      ensure => directory,
-      owner  => $app_agent_owner,
-      group  => $app_agent_group
-    }
-
-    # Extract Binary  
-    archive { $app_agent_install_dir:
-      path         => "${app_agent_install_dir}/${app_agent_binary}",
-      source       => $app_agent_binary_source,
-      extract      => true,
-      extract_path => $app_agent_install_dir,
-      user         => $app_agent_owner,
-      group        => $app_agent_group,
-      cleanup      => true,
-      creates      => $app_controller_info_file,
-      require      => File[$app_agent_install_dir]
-    }
-
   } elsif versioncmp($_version, $_old_version) < 0 { # Downgrading
     fail("Downgrading isn't enabled.")
+  }
+
+  # Create Dir `
+  file {$app_agent_install_dir:
+    ensure => directory,
+    owner  => $app_agent_owner,
+    group  => $app_agent_group
+  }
+
+  # Extract Binary
+  archive { $app_agent_install_dir:
+    path         => "${app_agent_install_dir}/${app_agent_binary}",
+    source       => $app_agent_binary_source,
+    extract      => true,
+    extract_path => $app_agent_install_dir,
+    user         => $app_agent_owner,
+    group        => $app_agent_group,
+    cleanup      => true,
+    creates      => $app_controller_info_file,
+    require      => File[$app_agent_install_dir]
   }
 
   # Set controller config file 
@@ -144,29 +135,28 @@ class appd_agent::linux (
       command => "test -d ${machine_agent_install_dir} && mv ${machine_agent_install_dir} ${machine_agent_install_dir}.${old_version}",
       path    => ['/usr/sbin/','/usr/bin/','/bin', '/sbin',],
     }
-
-    # Create Dir 
-    file {$machine_agent_install_dir:
-      ensure => directory,
-      owner  => $machine_agent_owner,
-      group  => $machine_agent_group
-    }
-
-    # Extract Binary  
-    archive { $machine_agent_install_dir:
-      path         => "${machine_agent_install_dir}/${machine_agent_binary}",
-      source       => $machine_agent_binary_source,
-      extract      => true,
-      extract_path => $machine_agent_install_dir,
-      user         => $machine_agent_owner,
-      group        => $machine_agent_group,
-      cleanup      => true,
-      creates      => $machine_controller_info_file,
-      require      => File[$machine_agent_install_dir]
-    }
-
   } elsif versioncmp($_version, $_old_version) < 0 { # Downgrading
     fail("Downgrading isn't enabled.")
+  }
+
+  # Create Dir 
+  file {$machine_agent_install_dir:
+    ensure => directory,
+    owner  => $machine_agent_owner,
+    group  => $machine_agent_group
+  }
+
+  # Extract Binary  
+  archive { $machine_agent_install_dir:
+    path         => "${machine_agent_install_dir}/${machine_agent_binary}",
+    source       => $machine_agent_binary_source,
+    extract      => true,
+    extract_path => $machine_agent_install_dir,
+    user         => $machine_agent_owner,
+    group        => $machine_agent_group,
+    cleanup      => true,
+    creates      => $machine_controller_info_file,
+    require      => File[$machine_agent_install_dir]
   }
 
   # Set controller config file 
