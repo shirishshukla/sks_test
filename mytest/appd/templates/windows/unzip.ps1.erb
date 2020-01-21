@@ -1,4 +1,0 @@
-# unzip.ps1.erb
-$shell = New-Object -COMObject Shell.Application;
-$zipfile = $shell.NameSpace("<%= @zipfile %>");
-foreach($item in $zipfile.Items()){ $shell.NameSpace("<%= @destination %>").CopyHere($item, <%= @options %>) };
