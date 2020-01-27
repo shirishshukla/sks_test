@@ -21,7 +21,6 @@
 # @param win_machine_agent_install_dir Machine agent installation directory path
 # @param opt_free_space desired free space in /opt
 
-
 ##
 # Document:
 #   DB Agent:
@@ -54,7 +53,8 @@ class ahead_appd::windows(
   $win_binary_dir                    = $ahead_appd::win_binary_dir,
   $win_db_agent_install_dir          = $ahead_appd::win_db_agent_install_dir,
   $win_app_agent_install_dir         = $ahead_appd::win_app_agent_install_dir,
-  $win_machine_agent_install_dir     = $ahead_appd::win_machine_agent_install_dir
+  $win_machine_agent_install_dir     = $ahead_appd::win_machine_agent_install_dir,
+  $win_iisappenabled                 = $ahead_appd::win_iisappenabled
 ) {
 
   # Validate Drive exist ?
@@ -62,7 +62,7 @@ class ahead_appd::windows(
 
   # Validate Drive have min 4000 MB free space
   $free_space = inline_template('<% val=@win_drive_letter %><%= @win_disk_space.grep(/#{val}/)[0].split(":")[-1].to_i  %>')
-  if $free_space.scanf('%d')[0] < 3000 {
+  if $free_space.scanf('%d')[0] < 1000 {
     fail("Fail: free space on /opt is ${free_space}M less than 4G")
   }
 
@@ -99,8 +99,6 @@ class ahead_appd::windows(
   $_version     = regsubst($db_agent_version, '(^\d+\.\d+\.\d+).*$', '\1')          # Don't care about the patch level
   $_old_version = regsubst($old_version, '(^\d+\.\d+\.\d+).*$', '\1')               # Don't care about the patch level
 
-  notify {"hello ${_version} -> ${_old_version}":}
-
   if versioncmp($_version, $_old_version) > 0 {  # Need to upgrade, so backup
 
     notify{"Upgrading DB Agent from ${_old_version} to ${_version}":}
@@ -108,19 +106,20 @@ class ahead_appd::windows(
     ahead_appd::windows::service_action { "Stop Service ${db_agent_service_name}":
       service => $db_agent_service_name,
       status  => 'stop',
-    }
+    } 
 
     # UnInstall DB Agent as service if already installed
     exec { 'Un-install DB Agent as a Service':
       command  => "${$db_agent_install_dir}\\cscript UninstallService.vbs",
       provider => 'powershell',
       onlyif   => '$result = Test-Path -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Appdynamics Database Agent";if ($result -eq "True") { Exit 0 } else { Exit 1 };',  # lint:ignore:140chars
+      require  => Ahead_appd::Windows::Service_action["Stop Service ${db_agent_service_name}"]
     }
 
-    exec { "Backup AppD DB Agent ${old_version}":
-      command  => "Rename-Item -Path ${db_agent_install_dir} -newName ${db_agent_install_dir}.${old_version}", #$ -ErrorAction Ignore,
+    exec { "Backup AppD DB Agent ${_old_version}":
+      command  => "Rename-Item -Path ${db_agent_install_dir} -newName ${db_agent_install_dir}_${_old_version}", #$ -ErrorAction Ignore,
       provider => 'powershell',
-      onlyif   => "\$result = Test-Path -Path ${db_agent_install_dir};if (\$result -eq \"True\") { Exit 0 } else { Exit 1 };",   # lint:ignore:140chars
+	  onlyif   => "IF ( Test-Path -Path ${db_agent_install_dir} ) { Exit 0 } ELSE { Exit 1 }",   # lint:ignore:140chars
       notify   => File[$db_agent_install_dir],
       require  => Exec['Un-install DB Agent as a Service']
     }
@@ -196,21 +195,21 @@ class ahead_appd::windows(
       $j_old_version = $java_agent_version # make them the same so you dont need to backup; versioncmp() will return 0 since equal
     }
 
-    $j_version     = regsubst($java_agent_version, '(^\d+\.\d+\.\d+).*$', '\1')          # Don't care about the patch level
-    $j_old_version = regsubst($j_old_version, '(^\d+\.\d+\.\d+).*$', '\1')               # Don't care about the patch level
+    $_j_version     = regsubst($java_agent_version, '(^\d+\.\d+\.\d+).*$', '\1')          # Don't care about the patch level
+    $_j_old_version = regsubst($j_old_version, '(^\d+\.\d+\.\d+).*$', '\1')               # Don't care about the patch level
 
-    if versioncmp($j_version, $j_old_version) > 0 {  # Need to upgrade, so backup
+    if versioncmp($_j_version, $_j_old_version) > 0 {  # Need to upgrade, so backup
 
-      notify{"Upgrading App Java Agent from ${j_old_version} to ${j_version}":}
+      notify{"Upgrading App Java Agent from ${_j_old_version} to ${_j_version}":}
 
-      exec { "Backup AppD Java Agent ${j_old_version}":
-        command  => "Rename-Item -Path ${app_agent_install_dir} -newName ${app_agent_install_dir}.${j_old_version}", #$ -ErrorAction Ignore,
+      exec { "Backup AppD Java Agent ${_j_old_version}":
+        command  => "Rename-Item -Path ${app_agent_install_dir} -newName ${app_agent_install_dir}.${_j_old_version}", #$ -ErrorAction Ignore,
         provider => 'powershell',
-        onlyif   => "\$result = Test-Path -Path ${app_agent_install_dir};if (\$result -eq \"True\") { Exit 0 } else { Exit 1 };",   # lint:ignore:140chars
+	    onlyif   => "IF ( Test-Path -Path ${app_agent_install_dir} ) { Exit 0 } ELSE { Exit 1 }",   # lint:ignore:140chars
         notify   => File[$app_agent_install_dir],
       }
 
-    } elsif versioncmp($j_version, $j_old_version) < 0 { # Downgrading
+    } elsif versioncmp($_j_version, $_j_old_version) < 0 { # Downgrading
         fail("Downgrading isn't enabled.")
     }
 
@@ -277,6 +276,7 @@ class ahead_appd::windows(
           'account_access_key'     => $account_acces_key,
           'controller_port'        => $controller_port,
           'controller_ssl_enabled' => $controller_ssl_enabled,
+		  'iisappenabled'          => $win_iisappenabled
         }
       ),
       require => File[$app_dotnet_agent_dir],
@@ -307,7 +307,7 @@ class ahead_appd::windows(
     #  path        => $facts['path'],
     #}
 
-    # start dor net agent AppDynamics.Agent.Coordinator_service
+    # Start dot net agent 'AppDynamics.Agent.Coordinator_service'
     service { 'AppDynamics.Agent.Coordinator_service':
       ensure  => 'running',
       enable  => true,
@@ -328,12 +328,12 @@ class ahead_appd::windows(
     $m_old_version = $machine_agent_version # make them the same so you dont need to backup; versioncmp() will return 0 since equal
   }
 
-  $m_version     = regsubst($machine_agent_version, '(^\d+\.\d+\.\d+).*$', '\1')          # Don't care about the patch level
-  $m_old_version = regsubst($m_old_version, '(^\d+\.\d+\.\d+).*$', '\1')                  # Don't care about the patch level
+  $_m_version     = regsubst($machine_agent_version, '(^\d+\.\d+\.\d+).*$', '\1')          # Don't care about the patch level
+  $_m_old_version = regsubst($m_old_version, '(^\d+\.\d+\.\d+).*$', '\1')                  # Don't care about the patch level
 
-  if versioncmp($m_version, $m_old_version) > 0 {  # Need to upgrade, so backup
+  if versioncmp($_m_version, $_m_old_version) > 0 {  # Need to upgrade, so backup
 
-    notify{"Upgrading Machine Agent from ${m_old_version} to ${m_version}":}
+    notify{"Upgrading Machine Agent from ${_m_old_version} to ${_m_version}":}
 
     ahead_appd::windows::service_action { "Stop Service ${machine_agent_service_name}":
       service => $machine_agent_service_name,
@@ -345,17 +345,19 @@ class ahead_appd::windows(
       command  => "${machine_agent_install_dir}\\cscript UninstallService.vbs",
       provider => 'powershell',
       onlyif   => '$result = Test-Path -Path "HKLM:\SYSTEM\CurrentControlSet\Services\Appdynamics Machine Agent";if ($result -eq "True") { Exit 0 } else { Exit 1 };',  # lint:ignore:140chars ## CHECK
+      require  => Ahead_appd::Windows::Service_action["Stop Service ${machine_agent_service_name}"]
     }
 
-    exec { "Backup AppD Machine Agent ${m_old_version}":
-      command  => "Rename-Item -Path ${machine_agent_install_dir} -newName ${machine_agent_install_dir}.${m_old_version}", # lint:ignore:140chars
+    exec { "Backup AppD Machine Agent ${_m_old_version}":
+      command  => "Rename-Item -Path ${machine_agent_install_dir} -newName ${machine_agent_install_dir}.${_m_old_version}", # lint:ignore:140chars
       provider => 'powershell',
-      onlyif   => "\$result = Test-Path -Path ${machine_agent_install_dir};if (\$result -eq \"True\") { Exit 0 } else { Exit 1 };",   # lint:ignore:140chars
+      #onlyif   => "\$result = Test-Path -Path ${machine_agent_install_dir};if (\$result -eq \"True\") { Exit 0 } else { Exit 1 };",   # lint:ignore:140chars
+	  onlyif   => "IF ( Test-Path -Path ${machine_agent_install_dir} ) { Exit 0 } ELSE { Exit 1 }",   # lint:ignore:140chars	  
       notify   => File[$machine_agent_install_dir],
       require  => Exec['Un-install Machine Agent as a Service']
     }
 
-  } elsif versioncmp($m_version, $m_old_version) < 0 { # Downgrading
+  } elsif versioncmp($_m_version, $_m_old_version) < 0 { # Downgrading
       fail("Downgrading isn't enabled.")
   }
 
@@ -428,15 +430,17 @@ define ahead_appd::windows::service_action(
 
   case $status {
                   'stop': {
-                              exec {"${name} ${status} ${service}":
-                                command  => "Stop-Service -Name ${service} -Force",
-                                provider => 'powershell'
-                              }
+				            notify {"hello ..${name} ${status} ${service}":}
+                            exec {"${name} ${status} ${service}":
+                              command  => "Stop-Service -Name \"${service}\" -Force -ErrorAction Ignore",
+							  #command  => "net stop $service",
+                              provider => 'powershell'
+                            }
                           }
 
                   'start': {
                             exec {"${name} - ${status} ${service}":
-                              command  => "Start-Service -Name ${service}",
+                              command  => "Start-Service -Name \"${service}\" -Force -ErrorAction Ignore",
                               provider => 'powershell'
                             }
                           }

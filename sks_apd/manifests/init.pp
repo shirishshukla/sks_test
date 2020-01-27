@@ -37,6 +37,7 @@ class ahead_appd(
   String $win_java_agent_binary_file                 = 'AppServerAgent-4.5.17.28908.zip',
   String $win_dot_net_agent_binary_file              = 'dotNetAgentSetup64-4.5.18.1.msi',
   String $win_machine_agent_binary_file              = 'machineagent-bundle-64bit-windows-4.5.16.2357.zip',
+  Boolean $win_iisappenabled                         = true,
 ) {
 
   $os_kernel = $facts['kernel']
