@@ -1,0 +1,474 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+Metadata: 
+  AWS::CloudFormation::Interface: 
+    ParameterGroups: 
+      -
+        Label:
+          default: "Tags"
+        Parameters:
+          - pApplicationName
+          - pEnv
+          - pCFNOwnerTag
+    
+    ParameterLabels:
+      pApplicationName:
+        default: "Application Name"
+      pEnv:
+        default: "Environment"
+      pCFNOwnerTag:
+        default: "CorpID of Owner"
+      pGroupId:
+        default: "GroupId"
+      pSubnetID1:
+        default: "Subnet ID 1"
+      pSubnetID2:
+        default: "Subnet ID 2"
+      pSubnetID3:
+        default: "Subnet ID 3"
+
+# Paramaters that the user will be prompted for when running this template
+# Note that the values from these parameters will be used and referenced
+#  by the resources below
+
+Parameters:
+
+  # CorpID of the person who 'owns' the stack and associated resources
+  pCFNOwnerTag:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: "Enter CorpID of the owner of this stack (for tagging of resources)"
+    Default: /general/owner
+
+  # Environment specification (appended to tags, etc)
+  pEnv:
+    Type: 'String'
+    Description: "The environment"
+    AllowedValues:
+      - 'PROD'
+      - 'QA'
+      - 'TEST'
+      - 'DEV'
+
+  # Application Name (used in stack / resource names, tags)
+  pApplicationName:
+    Type: 'String'
+    Description: "The name of the application"
+
+  # Take values from ssm parameter store     
+  VPC:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: "The Security VPCID of the Lambda Depyloyment"
+    Default: /vpc/id
+    
+  pGroupId:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: "The Security GroupID of the Lambda Depyloyment"
+    Default: /vpc/Securitygroupid
+ 
+  # To get the SubnetID for lambda execution 
+  pSubnetID1:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: "The SubnetID1 of the Lambda Depyloyment"
+    Default: /vpc/privatesubnet1/id
+ 
+  pSubnetID2:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: "The SubnetID2 of the Lambda Depyloyment"
+    Default: /vpc/privatesubnet2/id
+ 
+  pSubnetID3:
+    Type: 'AWS::SSM::Parameter::Value<String>'
+    Description: "The SubnetID3 of the Lambda Depyloyment"
+    Default: /vpc/privatesubnet3/id
+ 
+  Image:
+    Type: String
+    Description: "Enter image name in (repository-url/image:tag) format "
+    # Update with the Docker image. "You can use images in the Docker Hub registry or specify other repositories (repository-url/image:tag)."
+    
+  ServiceName:
+    Type: String
+    # update with the name of the service
+    
+  ContainerPort:
+    Type: Number
+    
+  LoadBalancerPort:
+    Type: Number
+    Default: 443
+    
+  MinContainers:
+    Type: Number
+    Default: 1
+    
+  # for autoscaling
+  MaxContainers:
+    Type: Number
+    Default: 2
+    
+  # For Task Definition
+  Cpu:
+    Type: String
+    Description: "The CPU values"
+    Default: '256'
+    AllowedValues:
+    - '256'
+    - '512'
+    - '1024'
+    - '2048'
+    - '4096'
+    
+  Memory:
+   Type: String
+   Description: "Enter how many MB of memory you would need"
+   Default: '512'
+    
+  # SQS and Lambda
+  # To get the groupID for lambda execution
+  QueueName:
+    Description: Name of the queue.
+    Type: String 
+   
+  DelaySeconds:
+    Description: The time in seconds that the delivery of all messages in the queue
+      is delayed. You can specify an integer value of 0 to 900 (15 minutes).
+    Type: Number
+    Default: '5'
+    
+  MaximumMessageSize:
+    Type: Number
+    Description: The limit of how many bytes that a message can contain before Amazon
+      SQS rejects it, 1024 bytes (1 KiB) to 262144 bytes (256 KiB)
+    Default: '262144'
+    
+  MessageRetentionPeriod:
+    Description: 'The number of seconds that Amazon SQS retains a message. You can
+      specify an integer value from 60 seconds (1 minute) to 1209600 seconds (14 days). '
+    Type: Number
+    Default: '345600'
+    
+  ReceiveMessageWaitTimeSeconds:
+    Description: Specifies the duration, in seconds, that the ReceiveMessage action
+      call waits until a message is in the queue in order to include it in the response,
+      as opposed to returning an empty response if a message is not yet available.
+      1 to 20
+    Type: Number
+    Default: '0'
+    
+  UsedeadletterQueue:
+    Description: A dead-letter queue is a queue that other (source) queues can target
+      for messages that can't be processed (consumed) successfully. You can set aside
+      and isolate these messages in the dead-letter queue to determine why their processing
+      doesn't succeed.
+    Type: String
+    AllowedValues:
+    - 'true'
+    - 'false'
+    Default: 'false'
+    
+  VisibilityTimeout:
+    Description: This should be longer than the time it would take to process and
+      delete a message, this should not exceed 12 hours.
+    Type: Number
+    Default: '10'
+
+  LambdaFunctionName:
+    Description: Lambda Function Name
+    Type: String
+    Default: 'psps-meterology-LAMBDA-dev'
+    
+  LambdaRole:
+    Description: Lambda Function IAM Role
+    Type: String
+    Default: 'arn:aws:iam::467317188419:role/Lambdatos3'
+  
+  LambdaRuntime:
+    Description: Lambda Function Runtime
+    Type: String
+    Default: 'python3.7'    
+    
+  
+Mappings: {}
+Conditions:
+  CreateDeadLetterQueue:
+    Fn::Equals:
+    - Ref: UsedeadletterQueue
+    - 'true'
+    
+Resources:
+# AWS IAM Role to be used with the AWS CodePipeline defined below
+# Allows CodePipeline to assume the role, perform appropriate actions
+# (logging, CodeBuild, S3, etc) on associated resources
+
+  #Cluster:
+  #  Type: AWS::ECS::Cluster
+  #  Properties:
+  #    ClusterName: !Join ['', [!Ref ServiceName, Cluster]]
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    # Makes sure the log group is created before it is used.
+    DependsOn: LogGroup
+    Properties:
+      # Name of the task definition. Subsequent versions of the task definition are grouped together under this name.
+      Family: !Join ['', [!Ref ServiceName, TaskDefinition]]
+      # awsvpc is required for Fargate
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ## CPU
+      # 256 (.25 vCPU) - Available memory values: 0.5GB, 1GB, 2GB
+      # 512 (.5 vCPU) - Available memory values: 1GB, 2GB, 3GB, 4GB
+      # 1024 (1 vCPU) - Available memory values: 2GB, 3GB, 4GB, 5GB, 6GB, 7GB, 8GB
+      # 2048 (2 vCPU) - Available memory values: Between 4GB and 16GB in 1GB increments
+      # 4096 (4 vCPU) - Available memory values: Between 8GB and 30GB in 1GB increments
+      Cpu: !Ref Cpu
+      # 0.5GB, 1GB, 2GB - Available cpu values: 256 (.25 vCPU)
+      # 1GB, 2GB, 3GB, 4GB - Available cpu values: 512 (.5 vCPU)
+      # 2GB, 3GB, 4GB, 5GB, 6GB, 7GB, 8GB - Available cpu values: 1024 (1 vCPU)
+      # Between 4GB and 16GB in 1GB increments - Available cpu values: 2048 (2 vCPU)
+      # Between 8GB and 30GB in 1GB increments - Available cpu values: 4096 (4 vCPU)
+      Memory: !Ref Memory
+      # A role needed by ECS.
+      # "The ARN of the task execution role that containers in this task can assume. All containers in this task are granted the permissions that are specified in this role."
+      # "There is an optional task execution IAM role that you can specify with Fargate to allow your Fargate tasks to make API calls to Amazon ECR."
+      ExecutionRoleArn: !Ref ExecutionRole
+      # "The Amazon Resource Name (ARN) of an AWS Identity and Access Management (IAM) role that grants containers in the task permission to call AWS APIs on your behalf."
+      TaskRoleArn: !Ref TaskRole
+      ContainerDefinitions:
+        - Name: !Ref ServiceName
+          Image: !Ref Image
+          PortMappings:
+            - ContainerPort: !Ref ContainerPort
+          # Send logs to CloudWatch Logs
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-region: !Ref AWS::Region
+              awslogs-group: !Ref LogGroup
+              awslogs-stream-prefix: ecs
+
+  # A role needed by ECS
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ['', [!Ref ServiceName, ExecutionRole]]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+
+  # A role for the containers
+  TaskRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ['', [!Ref ServiceName, TaskRole]]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+      - PolicyName: !Sub '${AWS::StackName}-TASK-Role-${pEnv}'
+        PolicyDocument:
+          Version: '2012-10-17'
+          Statement:
+            - Effect: Allow
+              Action:
+                - s3:*
+              Resource: '*'
+            - Effect: Allow
+              Action:
+                - rds:*
+                - application-autoscaling:DeleteScalingPolicy
+                - application-autoscaling:DeregisterScalableTarget
+                - application-autoscaling:DescribeScalableTargets
+                - application-autoscaling:DescribeScalingActivities
+                - application-autoscaling:DescribeScalingPolicies
+                - application-autoscaling:PutScalingPolicy
+                - application-autoscaling:RegisterScalableTarget
+                - cloudwatch:DescribeAlarms
+                - cloudwatch:GetMetricStatistics
+                - cloudwatch:PutMetricAlarm
+                - cloudwatch:DeleteAlarms
+                - ec2:DescribeAccountAttributes
+                - ec2:DescribeAvailabilityZones
+                - ec2:DescribeInternetGateways
+                - ec2:DescribeSecurityGroups
+                - ec2:DescribeSubnets
+                - ec2:DescribeVpcAttribute
+                - ec2:DescribeVpcs
+                - sns:ListSubscriptions
+                - sns:ListTopics
+                - sns:Publish
+                - logs:DescribeLogStreams
+                - logs:GetLogEvents
+              #Effect: Allow
+              Resource: "*"
+            - Action: pi:*
+              Effect: Allow
+              Resource: arn:aws:pi:*:*:metrics/rds/*
+            - Action: iam:CreateServiceLinkedRole
+              Effect: Allow
+              Resource: "*"
+              Condition:
+                StringLike:
+                  iam:AWSServiceName:
+                  - rds.amazonaws.com
+                  - rds.application-autoscaling.amazonaws.com
+            - Action:
+              - secretsmanager:*
+              - cloudformation:CreateChangeSet
+              - cloudformation:DescribeChangeSet
+              - cloudformation:DescribeStackResource
+              - cloudformation:DescribeStacks
+              - cloudformation:ExecuteChangeSet
+              - ec2:DescribeSecurityGroups
+              - ec2:DescribeSubnets
+              - ec2:DescribeVpcs
+              - kms:DescribeKey
+              - kms:ListAliases
+              - kms:ListKeys
+              - lambda:ListFunctions
+              - rds:DescribeDBClusters
+              - rds:DescribeDBInstances
+              - tag:GetResources
+              Effect: Allow
+              Resource: "*"
+            - Action:
+              - lambda:AddPermission
+              - lambda:CreateFunction
+              - lambda:GetFunction
+              - lambda:InvokeFunction
+              - lambda:UpdateFunctionConfiguration
+              Effect: Allow
+              Resource: arn:aws:lambda:*:*:function:SecretsManager*
+            - Action:
+              - serverlessrepo:CreateCloudFormationChangeSet
+              Effect: Allow
+              Resource: arn:aws:serverlessrepo:*:*:applications/SecretsManager*
+            - Action:
+              - s3:GetObject
+              Effect: Allow
+              Resource: arn:aws:s3:::awsserverlessrepo-changesets*
+
+  # A role needed for auto scaling
+  AutoScalingRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Join ['', [!Ref ServiceName, AutoScalingRole]]
+      AssumeRolePolicyDocument:
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ecs-tasks.amazonaws.com
+            Action: 'sts:AssumeRole'
+      ManagedPolicyArns:
+        - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceAutoscaleRole'
+
+  ContainerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Join ['', [!Ref ServiceName, ContainerSecurityGroup]]
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref ContainerPort
+          ToPort: !Ref ContainerPort
+          SourceSecurityGroupId: !Ref LoadBalancerSecurityGroup
+
+  LoadBalancerSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: !Join ['', [!Ref ServiceName, LoadBalancerSecurityGroup]]
+      VpcId: !Ref VPC
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: !Ref LoadBalancerPort
+          ToPort: !Ref LoadBalancerPort
+          CidrIp: 0.0.0.0/0
+  
+  LogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Join ['', [/ecs/, !Ref ServiceName, TaskDefinition]] 
+  # SQS and Lambda Resource
+  SQSQueue:
+    Type: AWS::SQS::Queue
+    Properties:
+      QueueName:
+        Fn::Join:
+        - ''
+        - - Ref: QueueName
+      DelaySeconds:
+        Ref: DelaySeconds
+      MaximumMessageSize:
+        Ref: MaximumMessageSize
+      MessageRetentionPeriod:
+        Ref: MessageRetentionPeriod
+      ReceiveMessageWaitTimeSeconds:
+        Ref: ReceiveMessageWaitTimeSeconds
+      RedrivePolicy:
+        Fn::If:
+        - CreateDeadLetterQueue
+        - deadLetterTargetArn:
+            Fn::GetAtt:
+            - MyDeadLetterQueue
+            - Arn
+          maxReceiveCount: 5
+        - Ref: AWS::NoValue
+      VisibilityTimeout:
+        Ref: VisibilityTimeout
+  MyDeadLetterQueue:
+    Condition: CreateDeadLetterQueue
+    Type: AWS::SQS::Queue
+
+
+  LambdaFunction:
+    Type: AWS::Lambda::Function
+    Properties:
+      FunctionName: !Ref LambdaFunctionName
+      Timeout: 10
+      Runtime: !Ref LambdaRuntime
+      Handler: lambdajobs.invokeLambda
+      Role: !Ref LambdaRole
+      Environment:
+        Variables:
+          NODE_ENV: !Ref pEnv
+          FunctionName: !Sub '${AWS::StackName}-LAMBDA-${pEnv}'
+      # Tag all the things (from parameter values)
+      Tags:
+        - Key: CFNOwner
+          Value: !Ref pCFNOwnerTag
+        - Key: ENV
+          Value: !Ref pEnv
+        - Key: AppName
+          Value: !Ref pApplicationName
+      VpcConfig:
+        SecurityGroupIds:
+          - Ref: pGroupId
+        SubnetIds:
+          - Ref: pSubnetID1
+          - Ref: pSubnetID2
+          - Ref: pSubnetID3
+      Code:
+        ZipFile: !Sub |
+          # const postEvent = async (req, res) => {
+          #   // TODO implement
+          #   console.log("Hello from Lambda");
+          # };
+
+  LambdaFunctionEventSourceMapping:
+    Type: AWS::Lambda::EventSourceMapping
+    Properties:
+      BatchSize: 10
+      Enabled: true
+      EventSourceArn: !GetAtt SQSQueue.Arn
+      FunctionName: !GetAtt LambdaFunction.Arn
+      
+## END
