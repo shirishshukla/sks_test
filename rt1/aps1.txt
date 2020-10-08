@@ -1,1 +1,24 @@
 
+[defaults]
+host_key_checking = False
+private_key_file = /root/.ssh/id_rsa
+gathering = smart
+fact_caching = jsonfile
+fact_caching_connection = .cachdir
+fact_catching_timeout = 180
+inventory = inventory
+roles_path = roles
+retry_files_enabled = False
+ansible_connection=ssh
+ansible_user=root
+timeout = 10
+scp_if_ssh = True
+command_warnings=False
+
+[vg]
+192.168.8.111
+192.168.8.112
+
+[all:vars]
+ansible_ssh_user=vagrant
+ansible_ssh_pass=vagrant
