@@ -1,1 +1,239 @@
+#----------------------- OPENDJ.YML 
+- hosts: opendj
+  vars: 
+    - opendj_install_binary: "{{ opendj_install_binary | default('https://.......') }}"
+    - env: "{{ env | default('dev') }}"
+            # dev
+            # prod 
+    - type: "{{ type | default('1') }}"
+            # 1. Install Config Store
+            # 2. Install CTS Store
+            # 3. Install User Store
+            # 4. Install Replication Store
+            # 5. Uninstall All
+            # 6. NA 
 
+  roles:
+#    - dns addyy
+    - { role: opendj }
+#    - dns del
+
+----------------------- MAIN.YML -------------
+--- 
+
+## Basic Setup 
+- include_tasks: initial_setup.yml
+#- include_tasks: limits.conf.yml
+---
+2..18 
+
+## Users
+#- include_tasks: local_users.yml
+---
+19..56
+
+## FS
+#- include_tasks: file_systems.yml
+---
+58..80
+
+## Dir Permissions
+#- include_tasks: dir_permissions.yml
+---
+183..213
+
+# ------------------------------------ #
+
+## performing File system check -- not needed 
+- include_tasks: file_systems_check.yml 
+--- you have code 
+
+## Validate Account # :500      -- seems not needed 
+
+## sjava Installtion # :505
+- include_tasks: install_java.yml
+---
+  - name: Is /opt/sajava exist 
+    stat:
+      path: /opt/sajava
+    register: is_dir_opt_sajava
+
+  - name: Install openjava
+    ..
+    ..
+    when: not is_dir_opt_sajava.stat.exists
+    
+## limits - not needed # :514 already we have in initial_setup.yml 
+
+## ADD HSBC SIGNERS # :90
+- include_tasks: signer_add.yml
+#create file in roles/opendj/files/<all-4-file with content ... >
+--- 
+  - name: Create Cert Files
+    file:
+      src: "{{ item.split('/')[-1] }}"
+      dest: "{{ item }}
+    with_items:
+      - /tmp/hsbcsha2root.arm
+      - /tmp/hsbcsha2int.arm
+      - /tmp/hsbc-root-sha1
+      - /tmp/hsbc-int-sha1
+     
+  #  Take backup of /opt/sajava/jre/lib/security/cacerts
+  - name: Take Bckup of $loc_cacerts
+    shell: "cp -rp {{ loc_cacerts }} {{ loc_cacerts }}_BKP"
+    vars:
+      - loc_cacerts: /opt/sajava/jre/lib/security/cacerts 
+    run_once: true
+    
+  # Import Certs
+  - name: Import Certs
+    shell: "{{ keytool }} -importcert -noprompt -keystore {{ loc_cacerts }} -storepss changeit -alias {{ item.value }} -file {{ item.key }} &>>/dev/null"
+    vars:
+      - keytool: /opt/sajava/bin/keytool
+      - loc_cacerts: /opt/sajava/jre/lib/security/cacerts 
+    with_dict:
+      - /tmp/hsbcsha2root.arm: hsbc-root-sha2
+      - /tmp/hsbcsha2int.arm: hsbc-int-sha2
+      - /tmp/hsbc-root-sha1: hsbc-root-sha1
+      - /tmp/hsbc-int-sha1: hsbc-int-sha1
+
+
+## Opendj Installtion :529
+
+# Install config store # :243
+- include_tasks: config_store.yml
+  when: type == '1'   
+--- 
+  # your code ...
+  
+  #end# :535
+  - name: Adding appd args in setenv file
+    shell: "cat {{ filesrc }} >> {{ filedst }}
+    vars:
+      filesrc: /home/opendj/opendj_correction/appd_args_dev_edited
+      filedst: /opt/opendj/replicationstore/opendj/config/java.properies
+    run_once: true
+    when: env == 'dev'
+    
+  - name: Adding appd args in setenv file
+    shell: "cat {{ filesrc }} >> {{ filedst }}
+    vars:
+      filesrc: /home/opendj/opendj_correction/apps_args_prod
+      filedst: /opt/opendj/replicationstore/opendj/config/java.properies
+    run_once: true
+    when: env == 'prod'
+    
+   # :543
+
+# Install cts store # :
+- include_tasks: cts.yml
+  when: type == '2'   ....
+ 
+ .................> 3.. 4
+ 
+ 
+## Uninstall Opendj # :341
+- include_tasks: uninstall.yml 
+  when:
+      - type == "5"
+---
+
+  - name: Is /opt/opendj/replicationstore exist 
+    stat:
+      path: /opt/opendj/replicationstore exist 
+    register: dir_replnstore
+      
+  - name: Uninstall Opendj: unconfigure replicationserver 
+    shell: "{{ dsreplication }} unconfigure -unconfigureReplicationServer --hostname {{ ansible_fqdn }} --port {{ port }} --baseDn {{ baseDn }} --adminUid admin -adminPassword rabbitmoondance --trustAll --no-prompt &>>/dev/null
+    vars:
+      dsreplication: /opt/opendj/replicationstore/opendj/bin/dsreplication
+      port: 4444
+      baseDn: dc=hsbc,dc=com
+    when: 
+      - dir_replnstore.stat.exists
+      - type == "5"
+      
+  #- name: exit here ...
+  
+## POST 
+- include_tasks: post_install_config.yml
+  when: type != '5'
+  
+# create file files/systemd_opendj #
+363..374
+
+---
+
+  ## CONFIG OPENDJ AUTOSTART # :596
+  # Auto Start Opendj  function # :357
+  # create systemd file 
+  - name: opendj systemd file
+    file: 
+      src: systemd_opendj
+      dest: /lib/systemd/system/autstart.service
+      
+  # :? 278 type ? and status ?
+  - name:
+  ....
+
+
+  ##  LOG Rotation pkg check # :680
+
+  ## cronjob # :607
+
+  ## Appd installation process # :625
+
+  ## Check status of stores and start them # :636
+  
+
+#-------------------------------------------------------
+## opendj_install # main.yml 
+- include_tasks: opendj_install.yml
+---
+  - name: Create /home/vrauser/opendj/
+    file:
+      path: /home/vrauser/opendj/
+      state: directory
+      mode: '0755'
+    
+  - name: Get opendj_install.tar and untar
+    unarchive:
+      src: "{{ opendj_install_binary }}"
+      dest: /home/vrauser/opendj/
+      remote_src: yes
+
+  - name: Create /home/opendj/opendj_correction
+    file:
+      path: /home/opendj/opendj_correction
+      state: directory
+      mode: '0755'
+    
+  - name: move files to directory opendj_correction
+    command: mv -f /home/vrauser/opendj/* /home/opendj/opendj_correction/
+    ignore_errors: true
+  
+
+## opendj_install
+- include_tasks: space_check.yml
+---  code given ...
+
+
+## Install CTS # :269
+- include_tasks: cts.yml 
+--- you have code ...
+
+## Install User Store # :296
+- include_tasks: cts.yml 
+--- you have code ...
+
+## Install Replication # :322
+- include_tasks: replication.yml 
+--- you have code ...
+
+
+
+
+  
+  
+  
