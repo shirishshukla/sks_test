@@ -133,8 +133,8 @@ end
 ## Open Gitbash 
 
 ## Export Proxy 
-export http_proxy=http://genproxy:8080
-export https_proxy=http://genproxy:8080
+export http_proxy=http://....
+export https_proxy=http://...
 
 ## Install Prerequisite plugins 
 #https://github.com/hashicorp/vagrant/wiki/Available-Vagrant-Plugins
