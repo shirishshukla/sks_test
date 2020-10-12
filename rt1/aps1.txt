@@ -1,1 +1,630 @@
-TEST
+--- 
+
+## Basic Setup 
+- include_tasks: initial_setup.yml
+#- include_tasks: limits.conf.yml
+2..18 
+
+19..56
+
+58..80
+
+183..213
+
+  - name: Create /home/vrauser/opendj/
+    file:
+      path: /home/vrauser/opendj/
+      state: directory
+      mode: '0755'
+    
+  - name: Get opendj_install.tar and untar
+    unarchive:
+      src: "{{ opendj_install_binary }}" # variable declaired in playbook file.
+      dest: /home/vrauser/opendj/
+      remote_src: yes
+
+  - name: Create /home/opendj/opendj_correction
+    file:
+      path: /home/opendj/opendj_correction
+      state: directory
+      mode: '0755'
+    
+  - name: move files to directory opendj_correction
+    command: mv -f /home/vrauser/opendj/* /home/opendj/opendj_correction/
+    ignore_errors: true
+
+# ------------------------------------ #
+
+## performing File system check -- not needed 
+- include_tasks: file_systems_check.yml 
+--- you have code 
+
+## Validate Account # :500      -- seems not needed 
+
+## opendj_install
+- include_tasks: space_check.yml
+---  code given ...
+
+## sjava Installtion # :505
+- include_tasks: install_java.yml
+---
+  - name: Is /opt/sajava exist 
+    stat:
+      path: /opt/sajava
+    register: is_dir_opt_sajava
+
+  - name: Install Java ## Steps missing in script 
+    ..
+    ..
+    when: not is_dir_opt_sajava.stat.exists
+    
+
+## limits - not needed # :514 already we have in initial_setup.yml 
+
+## ADD HSBC SIGNERS # :90
+- include_tasks: signer_add.yml
+#create file in roles/opendj/files/<all-4-file with content ... >
+--- 
+  - name: Create Cert Files
+    file:
+      src: "{{ item.split('/')[-1] }}"
+      dest: "{{ item }}
+    with_items:
+      - /tmp/hsbcsha2root.arm
+      - /tmp/hsbcsha2int.arm
+      - /tmp/hsbc-root-sha1
+      - /tmp/hsbc-int-sha1
+     
+  #  Take backup of /opt/sajava/jre/lib/security/cacerts
+  - name: Take Bckup of $loc_cacerts
+    shell: "cp -rp {{ loc_cacerts }} {{ loc_cacerts }}_BKP"
+    vars:
+      - loc_cacerts: /opt/sajava/jre/lib/security/cacerts 
+    run_once: true
+    
+  # Import Certs
+  - name: Import Certs
+    shell: "{{ keytool }} -importcert -noprompt -keystore {{ loc_cacerts }} -storepss changeit -alias {{ item.value }} -file {{ item.key }} &>>/dev/null"
+    vars:
+      - keytool: /opt/sajava/bin/keytool
+      - loc_cacerts: /opt/sajava/jre/lib/security/cacerts 
+    with_dict:
+      - /tmp/hsbcsha2root.arm: hsbc-root-sha2
+      - /tmp/hsbcsha2int.arm: hsbc-int-sha2
+      - /tmp/hsbc-root-sha1: hsbc-root-sha1
+      - /tmp/hsbc-int-sha1: hsbc-int-sha1
+
+
+
+## Opendj Installtion :529 # add this in main.yml 
+  - name: Set fact profile as configstore
+    set_fact: type_profile = "configstore"
+    when: type == '1'
+
+  - name: Set fact profile as ctsstore
+    set_fact: type_profile = "ctsstore"
+    when: type == '2'
+
+  - name: Set fact profile as userstore
+    set_fact: type_profile = "userstore"
+    when: type == '3'
+
+  - name: Set fact profile as replicationstore
+    set_fact: type_profile = "replicationstore"
+    when: type == '4'
+
+
+#### # :529 
+## Install config store # :243
+- include_tasks: config_store.yml
+  when: type == '1'   
+--- 
+
+  # your code ...
+  
+  #end# :535
+  - name: Adding appd args in setenv file
+    shell: "cat {{ filesrc }} >> {{ filedst }}
+    vars:
+      filesrc: /home/opendj/opendj_correction/appd_args_dev_edited
+      filedst: "/opt/opendj/{{ type_profile }}/opendj/config/java.properies"
+    run_once: true
+    when: env == 'dev'
+    
+  - name: Adding appd args in setenv file
+    shell: "cat {{ filesrc }} >> {{ filedst }}
+    vars:
+      filesrc: /home/opendj/opendj_correction/apps_args_prod
+      filedst: "/opt/opendj/{{ type_profile }}/opendj/config/java.properies"
+    run_once: true
+    when: env == 'prod'
+    
+  - name: Config store Update opendj_javaheapdump.hprof logs path   
+    lineinfile:
+      path: /opt/opendj/configstore/opendj/config/java.properties
+      regexp: '/appvol/opendj/logs/opendj_javaheapdump.hprof'
+      line: "/appvol/opendj/{{ type_profile }}/logs/opendj_javaheapdump.hprof"
+      backrefs: yes
+      #create: yes 
+      
+  - name: Config store Update gc.logs path   
+    lineinfile:
+      path: /opt/opendj/configstore/opendj/config/java.properties
+      regexp: '/appvol/opendj/logs/gc.log'
+      line: "/appvol/opendj/{{ type_profile }}/logs/gc.logs"
+      backrefs: yes
+      #create: yes 
+
+
+
+
+## Install cts store # :547
+- include_tasks: cts.yml
+  when: type == '2'
+  
+---
+  # your code ...installcts function # :269
+  
+  #end# :549
+  - name: CTS Store: Adding appd args in setenv file
+    shell: "cat {{ filesrc }} >> {{ filedst }}
+    vars:
+      filesrc: /home/opendj/opendj_correction/appd_args_dev_edited
+      filedst: "/opt/opendj/{{ type_profile }}/opendj/config/java.properies"
+    run_once: true
+    when: env == 'dev'
+    
+  - name: CTS Store: Adding appd args in setenv file
+    shell: "cat {{ filesrc }} >> {{ filedst }}
+    vars:
+      filesrc: /home/opendj/opendj_correction/apps_args_prod
+      filedst: "/opt/opendj/{{ type_profile }}/opendj/config/java.properies"
+    run_once: true
+    when: env == 'prod'
+    
+  - name: CTS Store: Update opendj_javaheapdump.hprof logs path   
+    lineinfile:
+      path: "/opt/opendj/opendj/{{ type_profile }}/config/java.properties"
+      regexp: '/appvol/opendj/logs/opendj_javaheapdump.hprof'
+      line: "/appvol/opendj/{{ type_profile }}/logs/opendj_javaheapdump.hprof"
+      backrefs: yes
+      #create: yes 
+    vars:
+      type_profile: ctsstore
+      
+  - name: CTS Store: Update gc.logs path in java.properies
+    lineinfile:
+      path: "/opt/opendj/opendj/{{ type_profile }}/config/java.properties"
+      regexp: '/appvol/opendj/logs/gc.log'
+      line: "/appvol/opendj/{{ type_profile }}/logs/gc.logs"
+      backrefs: yes
+      #create: yes 
+
+
+
+## Install cts store # :561
+- include_tasks: user_store.yml
+  when: type == '3'
+  
+---
+  # your code for installuserstore function # :296 
+  
+  #end# :562
+  - name: User Store: Adding appd args in setenv file
+    shell: "cat {{ filesrc }} >> {{ filedst }}
+    vars:
+      filesrc: /home/opendj/opendj_correction/appd_args_dev_edited
+      filedst: "/opt/opendj/{{ type_profile }}/opendj/config/java.properies"
+    run_once: true
+    when: env == 'dev'
+    
+  - name: User Store: Adding appd args in setenv file
+    shell: "cat {{ filesrc }} >> {{ filedst }}
+    vars:
+      filesrc: /home/opendj/opendj_correction/apps_args_prod
+      filedst: "/opt/opendj/{{ type_profile }}/opendj/config/java.properies"
+    run_once: true
+    when: env == 'prod'
+    
+  - name: User Store: Update opendj_javaheapdump.hprof logs path   
+    lineinfile:
+      path: "/opt/opendj/{{ type_profile }}/opendj/config/java.properties"
+      regexp: '/appvol/opendj/logs/opendj_javaheapdump.hprof'
+      line: "/appvol/opendj/{{ type_profile }}/logs/opendj_javaheapdump.hprof"
+      backrefs: yes
+      #create: yes
+      
+  - name: User Store: Update gc.logs path in java.properies
+    lineinfile:
+      path: "/opt/opendj/{{ type_profile }}/opendj/config/java.properties"
+      regexp: '/appvol/opendj/logs/gc.log'
+      line: "/appvol/opendj/{{ type_profile }}/logs/gc.logs"
+      backrefs: yes
+      #create: yes 
+
+
+# Install cts store # :575
+- include_tasks: replication.yml
+  when: type == '4'
+  
+---
+  # your code for installreplication function # :322
+  
+  #end# :562
+  - name: Replication Store: Adding appd args in setenv file
+    shell: "cat {{ filesrc }} >> {{ filedst }}
+    vars:
+      filesrc: /home/opendj/opendj_correction/appd_args_dev_edited
+      filedst: "/opt/opendj/{{ type_profile }}/opendj/config/java.properies"
+    run_once: true
+    when: env == 'dev'
+    
+  - name: Replication Store: Adding appd args in setenv file
+    shell: "cat {{ filesrc }} >> {{ filedst }}
+    vars:
+      filesrc: /home/opendj/opendj_correction/apps_args_prod
+      filedst: "/opt/opendj/{{ type_profile }}/opendj/config/java.properies"
+    run_once: true
+    when: env == 'prod'
+    
+  - name: Replication Store: Update opendj_javaheapdump.hprof logs path   
+    lineinfile:
+      path: "/opt/opendj/{{ type_profile }}/opendj/config/java.properties"
+      regexp: '/appvol/opendj/logs/opendj_javaheapdump.hprof'
+      line: "/appvol/opendj/{{ type_profile }}/logs/opendj_javaheapdump.hprof"
+      backrefs: yes
+      #create: yes
+      
+  - name: Replication Store: Update gc.logs path in java.properies
+    lineinfile:
+      path: "/opt/opendj/{{ type_profile }}/opendj/config/java.properties"
+      regexp: '/appvol/opendj/logs/gc.log'
+      line: "/appvol/opendj/{{ type_profile }}/logs/gc.logs"
+      backrefs: yes
+      #create: yes 
+
+
+
+## Uninstall Opendj # :590 Function at# :341
+- include_tasks: uninstall.yml 
+  when:
+      - type == "5"
+---
+
+  - name: Is /opt/opendj/replicationstore exist 
+    stat:
+      path: /opt/opendj/replicationstore 
+    register: dir_replnstore
+      
+  - name: Uninstall Opendj: unconfigure replicationserver 
+    shell: "{{ dsreplication }} unconfigure -unconfigureReplicationServer --hostname {{ ansible_fqdn }} --port {{ port }} --baseDn {{ baseDn }} --adminUid admin -adminPassword rabbitmoondance --trustAll --no-prompt &>>/dev/null
+    vars:
+      dsreplication: /opt/opendj/replicationstore/opendj/bin/dsreplication
+      port: 4444
+      baseDn: dc=hsbc,dc=com
+    when: 
+      - dir_replnstore.stat.exists
+      - type == "5"
+  
+
+## Start Services 
+- include_tasks: auto_start_services.yml
+  when: type != '5'
+  
+############################## AUTOSTART
+## # : OPENDJ AUTOSTART
+# create file templates/systemd_opendj.j2 
+[Unit]
+Description:{{ service_description }}
+After=network.target
+
+[Service]
+Type=forking
+User=opendj
+Group=opendj
+ExecStart={{ service_exec_cmd }}
+
+[Install]
+WantedBy=multi-user.target
+
+---
+
+  ## CONFIG OPENDJ AUTOSTART # :596
+  # Auto Start Opendj  function autostartopendj # :357
+  # create systemd file 
+
+  ## For configstore
+  - name: opendj-cstore systemd file
+    template: 
+      src: systemd_opendj.j2
+      dest: "/lib/systemd/system/{{ service_name }}"
+    vars:
+      service_name: "opendj-cstore.service"
+      service_description: "OpenDJ Config Store Application"
+      service_exec_cmd: "/opt/opendj/configstore/opendj/bin/start-ds"
+    when: type = '1'
+    
+  - name: Start Enable Service 
+    systemd:
+      state: started  
+      daemon_reload: yes
+      enabled: yes 
+      name: opendj-cstore.service
+    when: type = '1'
+    
+  - name: Status Check opendj-cstore.service
+    shell: |
+        systemctl status opendj-cstore.service | grep active | cut -f 2 -d ":" | awk '{print $1}'
+    register: service_status
+    when: type = '1'
+    
+  - debug:
+      msg: "Service opendj-cstore.service Failed to start, pls check manually"
+    when: service_status.stdout != 'active'
+    when: type = '1'
+    
+  - name: Stopping opendj-cstore for further config 
+    shell: |
+        sh /opt/opendj/configstore/opendj/stop-ds 1>/dev/null
+    when: service_status.stdout == 'active'
+    become_user: opendj    
+    when: type = '1'
+
+  ## For ctsstore
+  - name: opendj-ctsstore systemd file
+    template: 
+      src: systemd_opendj.j2
+      dest: "/lib/systemd/system/{{ service_name }}"
+    vars:
+      service_name: "opendj-cts.service"
+      service_description: "OpenDJ CTS Store Application"
+      service_exec_cmd: "/opt/opendj/ctsstore/opendj/bin/start-ds"
+    when: type = '2'
+    
+  - name: Start Enable Service 
+    systemd:
+      state: started  
+      daemon_reload: yes
+      enabled: yes 
+      name: opendj-cts.service
+    when: type = '2'
+    
+  - name: Status Check opendj-cts.service
+    shell: |
+        systemctl status opendj-cts.service | grep active | cut -f 2 -d ":" | awk '{print $1}'
+    register: service_status
+    when: type = '2'
+    
+  - debug:
+      msg: "Service opendj-cts.service Failed to start, pls check manually"
+    when: service_status.stdout != 'active'
+    when: type = '2'
+    
+  - name: Stopping opendj-cts for further config 
+    shell: |
+        sh /opt/opendj/ctsstore/opendj/stop-ds 1>/dev/null
+    when: service_status.stdout == 'active'
+    become_user: opendj    
+    when: type = '2'
+
+
+  ## For userstore
+  - name: opendj-user_store systemd file
+    template: 
+      src: systemd_opendj.j2
+      dest: "/lib/systemd/system/{{ service_name }}"
+    vars:
+      service_name: "opendj-userstore.service"
+      service_description: "OpenDJ User Store Application"
+      service_exec_cmd: "/opt/opendj/userstore/opendj/bin/start-ds"
+    when: type = '3'
+    
+  - name: Start Enable Service 
+    systemd:
+      state: started  
+      daemon_reload: yes
+      enabled: yes 
+      name: opendj-userstore.service
+    when: type = '3'
+    
+  - name: Status Check opendj-userstore.service
+    shell: |
+        systemctl status opendj-userstore.service | grep active | cut -f 2 -d ":" | awk '{print $1}'
+    register: service_status
+    when: type = '3'
+    
+  - debug:
+      msg: "Service opendj-userstore.service Failed to start, pls check manually"
+    when: service_status.stdout != 'active'
+    when: type = '3'
+    
+  - name: Stopping opendj-userstore for further config 
+    shell: |
+        sh /opt/opendj/userstore/opendj/stop-ds 1>/dev/null
+    when: service_status.stdout == 'active'
+    become_user: opendj    
+    when: type = '3'
+
+  ## For Replication Store 
+  - name: opendj-replicationserver systemd file
+    template: 
+      src: systemd_opendj.j2
+      dest: "/lib/systemd/system/{{ service_name }}"
+    vars:
+      service_name: "opendj-rpstore.service"
+      service_description: "OpenDJ Replication Store Application"
+      service_exec_cmd: "/opt/opendj/replicationstore/opendj/bin/start-ds"
+    when: type = '4'
+    
+  - name: Start Enable Service 
+    systemd:
+      state: started  
+      daemon_reload: yes
+      enabled: yes 
+      name: opendj-rpstore.service
+    when: type = '4'
+    
+  - name: Status Check opendj-rpstore.service
+    shell: |
+        systemctl status opendj-rpstore.service | grep active | cut -f 2 -d ":" | awk '{print $1}'
+    register: service_status
+    when: type = '4'
+    
+  - debug:
+      msg: "Service opendj-rpstore.service Failed to start, pls check manually"
+    when: service_status.stdout != 'active'
+    when: type = '4'
+    
+  - name: Stopping opendj-rpstore for further config 
+    shell: |
+        sh /opt/opendj/replicationstore/opendj/stop-ds 1>/dev/null
+    when: service_status.stdout == 'active'
+    become_user: opendj    
+    when: type = '4'
+
+
+############################## AUTOSTART
+
+  ##  LOG Rotation pkg check # :600
+  
+  - name: Is /opt/svrinf/logrotate exist 
+    stat:
+      path: /opt/svrinf/logrotate
+    register: dir_svrinf_logrotate # - dir_replnstore.stat.exists
+
+  - name: Install Rotation package 
+    yum:
+      name: "{{ logrotation_rpm }}"
+      state: present 
+    vars:
+      logrotation_rpm: /home/opendj/opendj_correction/LogRotation-2.2-1.noarch.rpm
+    when: not dir_svrinf_logrotate.stat.exists
+  
+  
+
+## cronjob # :607
+- include_tasks: cron.yml
+  when: type != '5'
+  
+---
+
+  - name: is opendj in cron.allow
+    shell: grep -i /etc/cron.allow 1>/dev/null && echo 1 || echo 0  
+    register: is_opendj_in_cron_allow
+
+  - name: opendj in cron.allow 
+    lineinfile:
+      path: /etc/cron.allow
+      regexp: '^opendj'
+      line: 'opendj'
+      create: yes
+    when: is_opendj_in_cron_allow.stdout = 0
+
+  - name: Create /opt/svrinf/logrotate/logs/OPENDJ/
+    file:
+      state: directory
+      owner: root
+      group: opendj
+      mode: '0775'
+      recurse: yes 
+    when: is_opendj_in_cron_allow.stdout = 0
+
+  - name: Copy logrotate config files
+    copy:
+      src: "/home/opendj/opendj_correction/{{ }}"
+      dest:  "/opt/svrinf/logrotate/{{ }}"
+      owner: opendj
+      group: opendj
+      mode: '0755'
+    with_items:
+      - opendj_logrotate.properties
+      - opendj_rotate.conf
+    when: is_opendj_in_cron_allow.stdout = 0
+    
+  - name: Set name as profile in /opt/svrinf/logrotate/opendj_rotate.conf
+    replace:
+      path: /opt/svrinf/logrotate/opendj_rotate.conf
+      regexp: 'name'
+      replace: "{{ type_profile }}"
+    when: is_opendj_in_cron_allow.stdout = 0
+    
+  - name: Set cronjob for opendj logrotate 
+    cron:
+      name: "opendj log rotate"
+      minute: "0"
+      hour: "0"
+      job: "perl {{ logrotate_pl }} {{ rotate_conf }} {{ logrotate_prop }} > {{ log_file }} 2>&1"
+    vars:
+      logrotate_pl: '/opt/svrinf/logrotate/logrotate.pl'
+      rotate_conf: '/opt/svrinf/logrotate/opendj_rotate.conf'
+      logrotate_prop: '/opt/svrinf/logrotate/opendj_logrotate.properties'
+      log_file: '/opt/svrinf/logrotate/logs/OPENDJ/opendj_logrotate.log'
+    when: is_opendj_in_cron_allow.stdout = 0
+    
+  - name: Rotation is already setup replace in opendj_rotate.conf
+    shell: |
+            sed "s/name/{{ type_profile }}/g" /home/opendj/opendj_correction/opendj_rotate.conf >> /opt/svrinf/logrotate/opendj_rotate.conf
+    when: is_opendj_in_cron_allow.stdout = 1
+    run_once: yes
+
+## Appd installation process # :625
+- name: Is /opt/appd exist 
+  stat:
+    path: /opt/appd
+  register: is_dir_opt_appd
+
+- include_tasks: install_appd
+  when: 
+   - type != '5'
+   - is_dir_opt_appd.stat.exist
+  
+---
+... code of function : installappd : 440 490?? PENDING ..
+
+
+## Check status of stores and start them # :636
+- include_tasks: start_ds.yml
+
+---
+
+  - name: Check App Status
+    shell: |
+       sh "{{ cmd_status }}" --offline | grep -i "Run status" | cut -f 2 -d ":"
+    vars:
+       cmd_status: "/opt/opendj/{{ type_profile }}/opendj/bin/status"
+    register: service_status
+    
+  - name: Start App Status if not running 
+    shell: |
+      sh "{{ cmd_start }}" &>>/dev/null
+    vars:
+      cmd_start: "/opt/opendj/{{ type_profile }}/opendj/bin/start-ds"
+    
+## END 
+
+#-------------------------------------------------------
+## opendj_install # main.yml 
+  
+
+
+########## Scrap
+## Install CTS # :269
+- include_tasks: cts.yml 
+--- you have code ...
+
+## Install User Store # :296
+- include_tasks: cts.yml 
+--- you have code ...
+
+## Install Replication # :322
+- include_tasks: replication.yml 
+--- you have code ...
+
+
+
+
+  
+  
+  
+#opendjinstall: 341
+#autostartopendj: 357
