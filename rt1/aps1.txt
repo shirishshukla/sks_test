@@ -1,1 +1,154 @@
-testing ..
+## create files/opendj.bash_profile 446...456
+  - name: Is /opt/appd exist 
+    stat:
+      path: /opt/appd
+    register: is_dir_opt_appd
+
+  - name: Get Java Homes
+    shell: |
+        ls -ld /opt/mdwjdk* | awk '{print $NF}'
+    register: java_homes
+    
+  - name: Create opendj user .bash_profile
+    file:
+      src: opendj.bash_profile
+      dest: /home/opendj/.bash_profile
+      owner: opendj
+      group: opendj
+      mode: '0755'
+      
+  - name: Update JAVA_HOME in opendj user .bash_profile
+    lineinfile:
+      path: /home/opendj/.bash_profile 
+      regexp: '^JAVA_HOME'
+      line: "{{ java_homes.stdout }}"
+      create: yes
+
+  - name: Run appd_binary.sh.opendj 
+    command: /home/opendj/opendj_correction/appd_binary.sh.opendj 1>/dev/null
+    
+  - name: Convert dos2unix /opt/appd/machineagent # ?? can we insatall dos2unix to do so ..??
+    command: sed -i 's/\r//g' /etc/init.d/machineagent
+    
+  - name: Set /etc/init.d/machineagent
+    file:
+      dest: /etc/init.d/machineagent
+      owner: root
+      group: root
+      
+  - name: Set opendj:opendj permission on /opt/appd
+    file:
+      dest: /opt/appd
+      owner: opendj
+      group: opendj
+      mode: '0755'
+      recurse: yes
+    
+  - name: Get Region from hostname
+    command: hostname -f | cut -c 1-2
+    register: host_region
+    
+  - name: Get Prop Path
+    command: find /opt -name java.properties | grep -iv template  #:463
+    register: prop_path
+    
+  # When env = prod and region = gb 
+  - name: copy controller-info.xml to machineagent/conf 
+    copy:
+      src: /home/opendj/opendj_correction/controller-info.xml
+      dest: /opt/appd/machineagent/conf/controller-info.xml
+    when:
+       - env == 'prod' 
+       - "{{ host_region.stdout }}" == 'gb' or "{{ host_region.stdout }}" == 'hk'
+          
+  - name: Set permission on opt/appd/machineagent/conf
+    file:
+      dest: /opt/appd/machineagent/conf/
+      owner: opendj
+      group: opendj
+      mode: '0755'
+      recurse: yes 
+    when:
+       - env == 'prod' 
+       - "{{ host_region.stdout }}" == 'gb' or "{{ host_region.stdout }}" == 'hk'
+
+  # When env = prod and region = hk
+  - name: Update appdynamic-machine-agent script
+    shell: |
+        sed -i '41d' /opt/appd/machineagent/etc/init.d/appdynamics-machine-agent
+        sed -i "4i {{ proxy_val }}" /opt/appd/machineagent/etc/init.d/appdynamics-machine-agent
+    vars:
+       proxy_val: 'JAVA_OPTS="-Dappdynamics.http.proxyHost=apxy1.hkhsbc -Dappdynamics.http.proxyPort=18084"'
+    when:
+       - env == 'prod' 
+       - "{{ host_region.stdout }}" == 'hk' 
+
+ 
+  # Restart appdynamic machine agent for prod hk or gb
+  - name: Stop appdynamic machine agent
+    shell: \
+         /opt/appd/machineagent/etc/init.d/appdynamics-machine-agent stop >/dev/null 2>&1 
+         sleep 5
+         /opt/appd/machineagent/etc/init.d/appdynamics-machine-agent start >/dev/null 2>&1 
+    when:
+       - env == 'prod' 
+       - "{{ host_region.stdout }}" == 'gb'  
+       
+  - name: Start appdynamic machine agent
+    shell: \
+         /opt/appd/machineagent/etc/init.d/appdynamics-machine-agent stop >/dev/null 2>&1 
+         sleep 5
+         /opt/appd/machineagent/etc/init.d/appdynamics-machine-agent start >/dev/null 2>&1 
+    when:
+       - env == 'prod' 
+       - "{{ host_region.stdout }}" == 'gb' or "{{ host_region.stdout }}" == 'hk'
+  
+  # For prod and hk
+  - name: Prod - hk, Update machineagent script
+    shell: |
+        sed -i '41d' /etc/init.d/machineagent
+        sed -i "4i {{ proxy_val }}" /etc/init.d/machineagent
+    vars:
+       proxy_val: 'JAVA_OPTS="-Dappdynamics.http.proxyHost=apxy1.hk.hsbc -Dappdynamics.http.proxyPort=18084"'
+    when:
+       - env == 'prod' 
+       - "{{ host_region.stdout }}" == 'hk'  
+ 
+  
+  # When env = dev and region = hk
+  - name: Dev - hk, Update appdynamic-machine-agent script
+    shell: |
+        sed -i '41d' /opt/appd/machineagent/etc/init.d/appdynamics-machine-agent
+        sed -i "4i {{ proxy_val }}" /opt/appd/machineagent/etc/init.d/appdynamics-machine-agent
+    vars:
+       proxy_val: 'JAVA_OPTS="-Dappdynamics.http.proxyHost=intpxy6.hk.hsbc -Dappdynamics.http.proxyPort=18084"'
+    when:
+       - env == 'dev' 
+       - "{{ host_region.stdout }}" == 'hk' 
+       
+  - name: Dev - hk, Update machineagent script
+    shell: |
+        sed -i '41d' /etc/init.d/machineagent
+        sed -i "4i {{ proxy_val }}" /etc/init.d/machineagent
+    vars:
+       proxy_val: 'JAVA_OPTS="-Dappdynamics.http.proxyHost=intpxy6.hk.hsbc -Dappdynamics.http.proxyPort=18084"'
+    when:
+       - env == 'prod' 
+       - "{{ host_region.stdout }}" == 'hk'     
+    
+   # Restart opendjstore
+  - name: StartCMD start-ds
+    command: find /opt/opendj -name start-ds
+    register: cmd_start_ds
+    
+  - name: StopCMD stop-ds
+    command: find /opt/opendj -name stop-ds
+    register: cmd_stop_ds
+ 
+  - name: Restart opendjstore
+    shell: |
+        "{{ cmd_stop_ds.stdout }}"
+        sleep 5
+        "{{ cmd_stop_ds.stdout }}"
+    become_user: opendj
+    when: cmd_start_ds.rc == 0 and cmd_stop_ds.rc == 0
