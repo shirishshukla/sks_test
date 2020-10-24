@@ -1,1 +1,12 @@
-test
+  - name: create file content list
+    shell: cat /tmp/file.txt
+    register: content_file
+
+  - name: Add entry in file1
+    lineinfile:
+      path: /tmp/test.txt
+      line: "{{ entry }}"
+      regex: "^{{ entry }}$"
+    vars:
+      entry: "{{ item.replace('name', site_profile) }}"
+    with_items: "{{ content_file.stdout_lines }}"
