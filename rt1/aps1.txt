@@ -1,1 +1,36 @@
-testst
+## kill java process
+- name: Get Java process pids
+  shell: ps -ef | grep -i [j]ava | awk '{ print $2 }'
+  register: java_pids
+
+- name: Kill Java pids
+  shell: kill -9 "{{ item }}"
+  when: java_pids.stdout_lines != ''
+  with_items: "{{ java_pids.stdout_lines }}"
+  ignore_errors: yes
+
+- name: Delete opendj dirs
+  shell: rm -rf "{{ item }}"
+  with_items:
+    - /opt/opendj/*
+    - /opt/appd
+    - /etc/init.d/machineagent
+    - /appvol/opendj
+    - /opt/svrinf/logrotate/opendj*
+  ignore_errors: yes
+
+- name: Remove opendj from cron.allow
+  lineinfile:
+    dest: /etc/cron.allow
+    regexp: '^opendj'
+    state: absent
+  ignore_errors: yes
+
+- name: unlink opendj systemd
+  shell: |
+     unlink /etc/systemd/system/multi-user.target.wants/opendj* &>>/dev/null
+  ignore_errors: yes
+
+- name: Remove opendj systemd file
+  shell: rm -rf /usr/lib/systemd/system/opendj*
+  ignore_errors: yes
