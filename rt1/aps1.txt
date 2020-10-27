@@ -1,1 +1,48 @@
-test
+## Build: Shell Script layer3_build.sh
+# Read input variables from opendj/layer3_pattern_metadata.yml
+pattern_name=$(awk -F: '/pattern_name/ {print $NF}' opendj/layer3_pattern_metadata.yml)
+template_name=$(awk -F: '/template_name/ {print $NF}' opendj/layer3_pattern_metadata.yml)
+vm_name=$(awk -F: '/vm_name/ {print $NF}' opendj/layer3_pattern_metadata.yml)
+# ansible
+actiontype=$(awk -F: '/action_type/ {print $NF}' opendj/layer3_pattern_metadata.yml)
+environment=$(awk -F: '/environment/ {print $NF}' opendjlayer3_pattern_metadata.yml)
+opendj_install_binary=$(awk -F: '/opendj_install_binary/ {print $NF}' opedj/layer3_pattern_metadata.yml)
+
+#
+case $actiontype in
+  configstore) action_type=1
+               ;;
+  ctsstore) action_type=2
+               ;;
+  userstore) action_type=3
+               ;;
+  replication) action_type=4
+               ;;
+  uninstall) action_type=5
+               ;;
+    *) echo -e "Wrong Action Type, exit "
+       exit 1
+       ;;
+esac
+
+
+# validate input
+if [[ -z $pattern_name || -z $template_name || -z $vm_name || -z $action_type || -z $environment || -z $install_binary ]]; then
+    echo "Either of the input vars in blank or not defined in opendj/layer3_pattern_metadata.yml, please validate."
+    exit 1
+fi
+
+# copy opendj roles to devops.artifacts
+cp -rp opendj/*  devops.artifacts/ansible/linux/RHEL7/playbook/
+
+# Run packer build
+cd devops.artifacts
+packer build -var "template=${template_name}"           \
+             -var "vm_name=${vm_name}"                   \
+             -var "action_type=${action_type}"             \
+             -var "environment=${environment}"             \
+             -var "install_binary=${opendj_install_binary}" \
+             -var "pattern=${pattern_name}"                  \
+             --var-file=build/vsphere-account.json  build/rhel7-layer2-vsphere-ansibletest.json
+
+## END
