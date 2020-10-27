@@ -1,1 +1,44 @@
-test
+1> Repo: opendj
+
+   roles/opendj, cacerts, logrotate
+   #global_vars/all.yml
+
+   layer3_pattern_metadata.yml
+  ---
+    pattern_name: opendj
+    template_name: sajavav8...
+    vm_name: <>
+    # Ansible variables
+    action_type: configstore, ctsstore, userstore, replication, uninstall
+    environment: dev/prod
+    opendj_install_binary: 'http://...'
+
+2> devops.artifacts
+
+Jenkins job:
+   - web-hook from "opendj" repository
+     -> scm
+      1. co - opedj repo (master)
+
+          WS/opendj
+
+      2. co - devops.artifacts repo (opendj_tar)
+           WS/devops.artifacts
+
+      ## Build: Shell Script
+      pattern_name=$(awk -F: '/pattern_name/ {print $NF}')
+      template_name=$(awk -F: '/template_name/ {print $NF}')
+      vm_name=$(awk -F: '/vm_name/ {print $NF}')
+      # ansible
+      action_type=$(awk -F: '/action_type/ {print $NF}')
+      environment=$(awk -F: '/environment/ {print $NF}')
+      opendj_install_binary=$(awk -F: '/opendj_install_binary/ {print $NF}')
+
+      #validate input
+      cp -rp opendj/*  devops.artifacts/ansible/linux/RHEL7/playbook/
+      cd devops.artifacts
+      packer build -vars "template=$template_name" -vars "pattern=$pattern_name" ...   --buid/...
+
+     ## WS ...
+     
+## 
