@@ -1,1 +1,25 @@
+yaml() {
+  
+python3 -c "
+import yaml
+data=yaml.safe_load(open('$1'))
+key=str('$2').split('.')
+try:
+    if len(key) == 1:
+        ret = ''
+        val = data[key[0]]
+        if type(val) is list:
+           for d in val:
+              ret += list(d.keys())[0]+'='+list(d.values())[0]+' '
+           print(ret)
+        else:
+            print(val)
+    elif len(key) == 2:
+        print([ e[key[1]] for e in data[key[0]] if list(e)[0] == key[1] ][0])
+    else:
+        print('Not-Supported-more-than-2-level')
+except:
+    pass
+"
 
+}
