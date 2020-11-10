@@ -1,25 +1,55 @@
-yaml() {
-  
-python3 -c "
-import yaml
-data=yaml.safe_load(open('$1'))
-key=str('$2').split('.')
-try:
-    if len(key) == 1:
-        ret = ''
-        val = data[key[0]]
-        if type(val) is list:
-           for d in val:
-              ret += list(d.keys())[0]+'='+list(d.values())[0]+' '
-           print(ret)
-        else:
-            print(val)
-    elif len(key) == 2:
-        print([ e[key[1]] for e in data[key[0]] if list(e)[0] == key[1] ][0])
-    else:
-        print('Not-Supported-more-than-2-level')
-except:
-    pass
-"
+Building Layer3 Pattern
+--------------------------
+OpenDJ application installation and configuration being managed by Ansible role "opendj"
 
-}
+
+Layer2 Pipeline Design
+--------------------------
+Jenkins job "name-of-your-job" get triggered via webhook on git repository "opendj"
+Code for layer3 pipeline is a created in shell script "build/<script-name" from github repository "devops.artifacts"
+It parse required variables from "opendj" repository "metadata_file.yaml" file.
+Packer use layer2 template as base and create new template with below implementations via "vsphere-clone" builder.
+ - Install Ansible
+ - Install Cloud-init required packages via Ansible role "cloud-init"
+ - Install and configure OpenDJ application via Ansible role "opendj"
+
+.... add some more description
+
+
+opendj/metadata_file.yaml
+--------------------------
+Script build/layer3_build.sh parse file "" for required variables
+
+... add snip of file here
+
+```
+explain each vars in short
+
+```
+
+devops.artifacts/build/layer3_setup.sh
+----------------------------------------
+Script is used to parse opendj/metadata_file.yaml and extract variables values.
+Run packer build to create layer3 template and upon success run terraform to create VM from layer3 template.
+
+
+devops.artifacts/build/rhel7-layer2-ansible.json
+--------------------------
+Packer uses template json file to define builders and provisioners to build template. This packer builder use layer2
+template and build new template using vsphere-clone builder.
+
+This template uses variables defined in repository opendj/pattern_metadata.yaml
+
+... snip of that file only code .. like ansible install and local ansible ..
+
+A shell provisioner execute script build/install_ansible.sh which creates required yum repositories
+and install Ansible and required dependencies.
+
+
+devops.artifacts/beploy/terraform....
+--------------------------
+After packer build is successfully created new VM template, terraform is used to launch new VM from template.
+
+.. exmplain template file here ...
+
+## END 
