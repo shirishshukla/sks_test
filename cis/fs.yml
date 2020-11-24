@@ -1,0 +1,3937 @@
+--- 
+
+# Cramfs FS should not be enabled or loaded 
+- block:
+    - name: Ensure mounting of cramfs filesystems is disabled
+      shell: modprobe -n -v cramfs
+      failed_when: > 
+         "install /bin/true" not in modconf.stdout and "Module cramfs not found" not in modconf.stderr
+      register: modconf
+
+    - name: Ensure mounting of cramfs filesystems not loaded
+      shell: lsmod | grep cramfs
+      failed_when: >
+         lsmod_cramfs.rc == 0      
+
+      register: lsmod_cramfs
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+         _failed: "{{ _failed | int + 1 }}"
+
+
+# freevxfs FS should not be enabled or loaded 
+- block:
+    - name: Ensure mounting of freevxfs filesystems is disabled
+      shell: modprobe -n -v freevxfs
+      failed_when: > 
+         "/bin/true" not in modconf.stdout and "Module freevxfs not found" not in modconf.stderr
+      register: modconf
+
+    - name: Ensure mounting of freevxfs filesystems not loaded
+      shell: lsmod | grep freevxfs
+      failed_when: >
+         lsmod_freevxfs.rc == 0
+
+      register: lsmod_freevxfs
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+     - set_fact: 
+         _failed: "{{ _failed | int + 1 }}"
+
+
+# jffs2 FS should not be enabled or loaded 
+- block:
+    - name: Ensure mounting of jffs2 filesystems is disabled
+      shell: modprobe -n -v jffs2
+      failed_when: > 
+        "/bin/true" not in modconf.stdout and "Module jffs2 not found" not in modconf.stderr
+      register: modconf
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+         
+    - name: Ensure mounting of jffs2 filesystems not loaded
+      shell: lsmod | grep jffs2
+      failed_when: >
+         lsmod_jjfs2.rc == 0      
+      register: lsmod_jjfs2
+
+    - set_fact:
+       _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+         _failed: "{{ _failed | int + 1 }}"
+
+
+# hfs FS should not be enabled or loaded 
+- block:
+    - name: Ensure mounting of hfs filesystems is disabled
+      shell: modprobe -n -v hfs
+      failed_when: > 
+         "/bin/true" not in modconf.stdout and "Module hfs not found" not in modconf.stderr
+      register: modconf
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+        
+    - name: Ensure mounting of hfs filesystems not loaded
+      shell: lsmod | grep hfs
+      failed_when: >
+         lsmod_hfs.rc == 0      
+      register: lsmod_hfs
+
+    
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# hfsplus FS should not be enabled or loaded 
+- block:
+    - name: Ensure mounting of hfsplus filesystems is disabled
+      shell: modprobe -n -v hfsplus
+      failed_when: > 
+         "/bin/true" not in modconf.stdout and "Module hfsplus not found" not in modconf.stderr
+      register: modconf
+
+    - name: Ensure mounting of hfsplus filesystems not loaded
+      shell: lsmod | grep hfsplus
+      failed_when: >
+         lsmod_hfsplus.rc == 0      
+      register: lsmod_hfsplus    
+    
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+     - set_fact: 
+         _failed: "{{ _failed | int + 1 }}"
+
+
+# squashfs FS should not be enabled or loaded 
+- block:
+    - name: Ensure mounting of squashfs filesystems is disabled
+      shell: modprobe -n -v squashfs
+      failed_when: > 
+         "/bin/true" not in modconf.stdout and "Module squashfs not found" not in modconf.stderr
+      register: modconf
+
+    - name: Ensure mounting of squashfs filesystems not loaded
+      shell: lsmod | grep squashfs
+      failed_when: >
+         lsmod_squashfs.rc == 0      
+      register: lsmod_squashfs
+
+    
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+       
+       
+# udf FS should not be enabled or loaded 
+- block:
+    - name: Ensure mounting of udf filesystems is disabled
+      shell: modprobe -n -v udf
+      failed_when: > 
+         "/bin/true" not in modconf.stdout and "Module udf not found" not in modconf.stderr
+      register: modconf
+
+      tags:
+        - mod_udf
+
+    - name: Ensure mounting of udf filesystems not loaded
+      shell: lsmod | grep udf
+      failed_when: >
+         lsmod_udf.rc == 0      
+      register: lsmod_udf      
+    
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+       
+
+# vfat FS should not be enabled or loaded 
+- block:
+    - name: Ensure mounting of vfat filesystems is disabled
+      shell: modprobe -n -v vfat
+      failed_when: > 
+         "/bin/true" not in modconf.stdout and "Module vfat not found" not in modconf.stderr
+      register: modconf
+
+      tags:
+          - varfs
+
+    - name: Ensure mounting of vfat filesystems not loaded
+      shell: lsmod | grep vfat
+      failed_when: >
+         lsmod_vfst.rc == 0      
+      register: lsmod_vfst      
+
+    
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+       
+       
+# Ensure separate partition exists for /tmp and nodev, nosuid, noexec option set on /tmp partition
+- block:
+    - name: Ensure separate partition exists for /tmp
+      shell: grep "[[:space:]]/tmp[[:space:]]" /etc/fstab
+
+      tags:
+          - tmp_fs    
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+      
+    - name: Ensure nodev, nosuid, noexec option set on /tmp partition
+      shell: grep "[[:space:]]/tmp[[:space:]]" /etc/fstab
+      failed_when: > 
+         'nodev' not in tmp_df.stdout or 'nosuid' not in tmp_df.stdout or 'noexec' not in tmp_df.stdout
+      register: tmp_df
+
+      tags:
+          - tmp_options
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure separate partition exists for /var
+- block:
+    - name: Ensure separate partition exists for /var
+      shell: grep "[[:space:]]/var[[:space:]]" /etc/fstab
+
+      tags:
+        - var_fs
+    
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure separate partition exists for /var/tmp
+- block:
+    - name: Ensure separate partition exists for /var/tmp
+      shell: grep -e "^/tmp[[:space:]]" /etc/fstab | grep /var/tmp 
+
+      tags:
+          - vartmp_fs
+    
+    - name: Ensure nodev, nosuid, noexec option set on /var/tmp partition
+      shell: grep -e "^/tmp[[:space:]]" /etc/fstab | grep /var/tmp
+      failed_when: > 
+         'nodev' not in vartmp_df.stdout or 'nosuid' not in vartmp_df.stdout or 'noexec' not in vartmp_df.stdout
+      register: vartmp_df
+
+      tags:
+          - vartmp_options
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"     
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+       
+
+# Ensure separate partition exists for /var/log
+- block:
+    - name: Ensure separate partition exists for /var/log
+      shell: grep "[[:space:]]/var/log[[:space:]]" /etc/fstab
+
+      tags:
+          - varlog_fs
+    
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+       
+- block:
+    - name: Ensure separate partition exists for /var/log/audit
+      shell: grep "[[:space:]]/var/log/audit[[:space:]]" /etc/fstab
+
+      tags:
+          - varlogaudit_fs
+    
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+       
+- block:
+    - name: Ensure separate partition exists for /home
+      shell: grep "[[:space:]]/home[[:space:]]" /etc/fstab
+
+      tags:
+          - home_fs
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+        
+    - name: Ensure nodev option set on /home partition
+      shell: grep "[[:space:]]/var/log/audit[[:space:]]" /etc/fstab
+      failed_when: > 
+         'nodev' not in home_df.stdout
+      register: home_df
+
+      tags:
+          - home_options
+            
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+       
+# Ensure nodev, noexec, noexec option set on /dev/shm partition                        
+- block:
+    - name: Ensure nodev, nosuid, noexec option set on /dev/shm partition
+      shell: grep /dev/shm /etc/fstab
+      failed_when: > 
+         'nodev' not in devshm_df.stdout or 'nosuid' not in devshm_df.stdout or 'noexec' not in devshm_df.stdout
+      register: devshm_df
+
+      tags:
+          - devshm_options
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"          
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure nodev option set on removable media partitions
+- block:
+    - name: Ensure nodev, nosuid, noexec option set on /dev/shm partition
+      shell: mount -l | grep "[[:space:]]iso[[:space:]]" | head -1
+      failed_when: > 
+         'nodev' not in removable_df.stdout or 'nosuid' not in removable_df.stdout or 'noexec' not in removable_df.stdout
+      register: removable_df
+
+      tags:
+          - remmedia_options
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"          
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure sticky bit is set on all world-writable directories
+- block:
+    - name:
+      shell: find / -path /proc -prune -o -type d \( -perm -0002 -a ! -perm -1000 \) -print 2>/dev/null
+      failed_when:
+        - sticky_bit_wr_dir.stdout != ""
+      register: sticky_bit_wr_dir
+
+      tags:
+        - sticky_bit_wr_dir
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Disable Automounting
+- block:
+    - name: Disable Automounting 
+      shell:  "{{ item }}"
+
+      failed_when: >
+         autofs_disabled.rc == 0      
+      register: autofs_disabled          
+      with_items:
+         - yum -q list installed autofs 
+         - systemctl is-enabled autofs 
+      tags:
+        - autofs_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure package manager repositories are configured
+- block:
+    - name:
+      shell:  yum repolist
+
+      tags:
+        - yum_repositories_configured
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure GPG keys are configured
+- block:
+    - name: Ensure GPG keys are configured
+      shell:  grep ^gpgcheck /etc/yum.repos.d/* | grep -v 0$
+      tags:
+        - yum_gpgkey_configured
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure gpgcheck is globally activated
+- block:
+    - name: Ensure gpgcheck is globally activated
+      shell: |
+         grep -e ^\s*gpgcheck\s*=\s*[^1] /etc/yum.repos.d/* | grep -v 0$
+      tags:
+        - yum_gpgcheck
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure AIDE is installed
+- block: 
+    - name: Ensure AIDE is installed
+      shell: yum -q list installed aide
+      tags:
+        - yum_aide_instaled
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure filesystem integrity is regularly checked
+- block:
+    - name: Ensure filesystem integrity is regularly checked
+      shell: |
+           grep -iR 'aide --check' /etc/cron.*/* 
+           #for pth in `echo -e '/etc/cron.hourly/' '/etc/cron.daily/' '/etc/cron.weekly/' '/etc/cron.monthly/' '/etc/cron.d/'`; do
+           #    for cron_file in `ls $pth`; do 
+           #        if [[ -s $cron_file ]]; then
+           #            grep -i 'aide --check' $cron_file || false
+           #        fi
+           #    done
+           #done          
+
+      register: aide_check_enabled              
+      failed_when: >
+          'aide --check' not in aide_check_enabled.stdout
+      tags:
+        - aide_check_enabled
+                            
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure permissions on bootloader config are configured
+- block:
+    - name: Ensure permissions on bootloader config /boot/grub2/grub.cfg are configured
+      shell:  stat -L -c "%a %u %g" /boot/grub2/grub.cfg | egrep "600 0 0"
+
+      tags:
+        - grub_conf_permission
+
+    - name: Ensure permissions on bootloader config /boot/grub2/user.cfg are configured
+      shell:  stat -L -c "%a %u %g" /boot/grub2/user.cfg | egrep "600 0 0"
+
+      tags:
+        - user_conf_permission
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure bootloader password is set 
+- block: 
+    - name: Ensure bootloader password is set
+      shell:  grep "^GRUB2_PASSWORD=" /boot/grub2/grub.cfg
+
+      tags:
+        - bootloader_psw_set
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure authentication required for single user & emergency mode
+- block:
+    - name: Ensure authentication required for single user & emergency mode
+      shell:  grep /sbin/sulogin /usr/lib/systemd/system/"{{ item }}".service            
+
+      with_items:
+         - rescue
+         - emergency
+      tags:
+        - authentications_for_singe_emergency_mode
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure core dumps are restricted
+- block:
+    - name: Ensure core dumps are restricted limit
+      shell:  grep -E "^\*\s*hard\s*core\s*" /etc/security/limits.conf /etc/security/limits.d/* | awk '{print $4}'
+      register: core_dump_restricted
+      failed_when:
+         core_dump_restricted.stdout != ""
+
+      tags:
+        - core_dump_restricted
+        
+    - name: Ensure core dumps are restricted sysctl 
+      shell:  sysctl fs.suid_dumpable | awk '{print $3}' | grep 0
+
+             
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"      
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure XD/NX support is enabled
+- block:
+    - name: Ensure XD/NX support is enabled
+      shell:  dmesg | grep NX| grep Execute
+      register: xdnd_support_enabled
+
+      tags:
+        - xdnd_support_enabled
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure address space layout randomization (ASLR) is enabled
+- block:
+    - name: Ensure address space layout randomization (ASLR) is enabled
+      shell:  sysctl kernel.randomize_va_space | awk '{print $3}' | grep 2
+
+      tags:
+        - aslr_enabled
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure prelink is disabled"
+- block:
+    - name: Ensure prelink is disabled
+      shell: yum -q list installed prelink
+      failed_when: >
+        prelink_installed.rc == 0
+      register: prelink_installed
+      tags:
+        - sticky_bit_wr_dir
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure SELinux is installed and not disabled in bootloader configuration
+- block:
+    - name: Ensure SELinux is installed
+      shell: rpm -qa libselinux
+      register: selinux_installed
+    
+    - name: Ensure SELinux is not disabled in bootloader configuration
+      shell:  grep -E "^\s*linux.*(selinux|enforcing)=0" /boot/grub2/grub.cfg
+      register: selinux_grub_state
+      failed_when:
+          selinux_grub_state.rc == 0
+      tags:
+        - selinux_grub_state
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure the SELinux state is enforcing
+- block:       
+    - name: Ensure the SELinux state is enforcing
+      shell:  getenforce | grep Enforcing
+      when: selinux_installed.rc == 0
+      tags:
+        - selinux_enforcing
+
+    - name: SELinux to enable when the system is booted
+      shell: sestatus | egrep  "{{ item }}"
+      when: selinux_installed.rc == 0
+      with_items:
+        - ^SELinux status:\s+enabled$
+        - ^Current mode:\s+enforcing$
+        - ^Mode from config file:\s+enforcing$
+      tags:
+        - selinux_status
+        
+    - name: Ensure SELinux policy is configured
+      shell: grep "{{ item }}" /etc/selinux/config
+      when: selinux_installed.rc == 0
+      with_items:
+        - ^\s*SELINUX\s*=\s*enforcing
+        - \s*SELINUXTYPE\s*=\s*(targeted|mls)
+      tags:
+        - selinux_status
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure SETroubleshoot is not installed
+- block:
+    - name: Ensure SETroubleshoot is not installed
+      shell: yum -q list installed setroubleshoot
+      register: setroubleshoot_pkg
+      failed_when:
+         setroubleshoot_pkg.rc == 0
+      tags:
+        - setroubleshoot_pkg
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure the MCS Translation Service (mcstrans) is not installed
+- block:
+    - name: Ensure the MCS Translation Service (mcstrans) is not installed
+      shell: yum -q list installed mcstrans
+      register: mcstrans_pkg
+      failed_when:
+         mcstrans_pkg.rc == 0
+      tags:
+        - mcstrans_pkg
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure no unconfined daemons exist
+- block:
+    - name: Ensure no unconfined daemons exist
+      shell: |
+         "ps -eZ | egrep 'initrc' | egrep -vw 'tr|ps|egrep|bash|awk' | tr ':' ' ' | awk '{print $NF }'"
+      register: unconfined_daemons
+      failed_when:
+        unconfined_daemons.stdout != ""
+      tags:
+        - unconfined_daemons
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure message of the day is configured properly 
+- block: 
+    - name: Ensure message of the day is configured properly
+      shell: egrep -v '(\\v|\\r|\\m|\\s)' /etc/motd
+      register: configured_etc_motd
+      tags:
+        - configured_etc_motd
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure remote login warning banner is configured properly
+- block:
+    - name: Ensure remote login warning banner is configured properly
+      shell: egrep -v '(\\v|\\r|\\m|\\s)' /etc/issue.net
+      tags: 
+        - configured_remote_login_banner
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure permissions on /etc/motd are configured
+- block:
+    - name: Ensure permissions on /etc/motd are configured
+      shell: stat -L -c "%a %u %g" /etc/motd  | egrep "644 0 0"
+      tags:
+        - permissions_etc_motd
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure permissions on /etc/issue and /etc/issue.net are configured
+- block:
+    - name: Ensure permissions on /etc/issue are configured
+      shell: stat -L -c "%a %u %g" "{{ item }}"  | egrep "644 0 0"
+      with_items:
+         - /etc/issue
+         - /etc/issue.net
+      tags:
+        - permissions_etc_issue
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure GDM login banner is configured
+- block:
+    - name: Ensure GDM login banner is configured
+      shell: yum -q list installed gdm
+      register: gdm_pkg
+      tags:
+        - gdm_pkg
+        
+    - name: Ensure GDM login banner is configured
+      shell: grep 'banner-message-enable=true' /etc/dconf/db/gdm.d/01-banner-message
+      when: gdm_pkg.rc == 0
+      
+    - name: Ensure GDM login banner text is not nil
+      shell: grep 'banner-message-text=' /etc/dconf/db/gdm.d/01-banner-message
+      register: dfm_banner_msg_text
+      failed_when: >
+          banner-message-text.stdout == ""
+      when: gdm_pkg.rc == 0
+
+    - name: Ensure mounting of cramfs filesystems is disabled
+      shell: grep "{{ item }}" /etc/dconf/profile/gdm
+      register: gdm_profile
+      with_items:
+        - user-db\s:\suser
+        - system-db\s:\sgdm
+        - file-db\s:\s/usr/share/gdm/greeter-dconf-defaults
+      when: gdm_pkg.rc == 0
+          
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure updates, patches, and additional security software are installed
+- block:
+    - name: Ensure updates, patches, and additional security software are installed
+      shell: yum check-update --security
+      tags:
+        - yum_security_updates
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure chargen services are not enabled
+- block:
+    - name: Ensure chargen services are not enabled
+      shell:  chkconfig --list "{{ item }}" | grep 'on'
+      register: chargen_xinetd_service
+      failed_when: >
+          chargen_xinetd_service.rc == 0
+      with_items:
+        - chargen
+        - chargen-dgram
+        - chargen-stream
+      tags:
+        - chargen_xinetd_service
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure daytime services are not enabled
+- block:
+    - name: Ensure daytime services are not enabled
+      shell:  chkconfig --list "{{ item }}" | grep 'on'
+      register: daytime_xinetd_service
+      failed_when: >
+         daytime_xinetd_service.rc == 0
+      with_items:
+        - daytime-dgram
+        - daytime-stream
+      tags:
+        - daytime_xinetd_service
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+
+# Ensure discard services are not enabled
+- block:
+    - name: Ensure discard services are not enabled
+      shell:  chkconfig --list "{{ item }}" | grep 'on'
+      register: discard_xinetd_service
+      failed_when: >
+          discard_xinetd_service.rc == 0
+      with_items:
+        - discard
+        - discard-dgram
+        - discard-stream
+      tags:
+        - discard_xinetd_service
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"   
+
+
+# Ensure echo services are not enabled
+- block:
+    - name: Ensure echo services are not enabled
+      shell:  chkconfig --list "{{ item }}" | grep 'on'
+      register: echo_xinetd_service
+      failed_when: >
+          echo_xinetd_service.rc == 0
+      with_items:
+        - echo-dgram
+        - echo-stream
+      tags:
+        - echo_xinetd_service
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"   
+
+# Ensure time services are not enabled
+- block:
+    - name: Ensure time services are not enabled
+      shell:  chkconfig --list "{{ item }}" | grep 'on'
+      register: time_xinetd_service
+      failed_when: >
+          time_xinetd_service.rc == 0
+      with_items:
+        - time-dgram
+        - time-stream
+      tags:
+        - time_xinetd_service
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"   
+
+# Ensure tftp server is not enabled
+- block:
+    - name: Ensure tftp server is not enabled
+      shell:  chkconfig --list "{{ item }}" | grep 'on'
+      register: tftp_xinetd_service
+      failed_when: >
+          tftp_xinetd_service.rc == 0
+      with_items:
+        - tftp
+      tags:
+        - tftp_xinetd_service
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"   
+        
+# Ensure xinetd is not enabled
+- block:
+    - name: Ensure xinetd is not enabled
+      shell:  chkconfig --list "{{ item }}" | grep 'on'
+      register: xinetd_service
+      failed_when: >
+          xinetd_service.rc == 0
+      with_items:
+        - xinetd
+      tags:
+        - xinetd_xinetd_service
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"   
+
+
+# Ensure time synchronization is in use
+- block:
+    - name: Ensure time synchronization package ntp is installed
+      shell: yum -q list installed ntp
+      tags:
+        - ntp_package_installed
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+- block:
+    - name: Ensure time synchronization package chrony is installed
+      shell: yum -q list installed chrony
+      tags:
+        - chrony_package_installed
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+# Ensure ntp is configured
+- block: 
+    - name: Ensure ntp is configured
+      shell: |
+        egrep -q "^restrict \-[46] default kod nomodify notrap nopeer noquery" /etc/ntp.conf \
+        && grep -q "^server" /etc/ntp.conf \
+        && grep -q "^OPTIONS=\"-u ntp:ntp\"" /etc/sysconfig/ntpd \
+        && grep -q "^\s*ExecStart\s*=\s*\/usr\/sbin\/ntpd\s*-u*\sntp:ntp" /usr/lib/systemd/system/ntpd.service
+      register: ntp_conf
+      failed_when: >
+          ntp_conf.rc != 0
+      tags:
+        - ntp_conf
+      when: ntp_package_installed.rc == 0  
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+             
+
+# Ensure chrony is configured
+- block: 
+    - name: Ensure chrony is configured
+      shell: |
+        grep -q "^server" /etc/chrony.conf && egrep -q "OPTIONS=\"\-u chrony\"" /etc/sysconfig/chronyd
+      register: chrony_conf
+      failed_when: >
+          chrony_conf.rc != 0
+      tags:
+        - chrony_conf
+      when: chrony_package_installed.rc == 0  
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+             
+
+# Ensure X Window System is not installed
+- block:
+    - name: Ensure X Window System is not installed
+      shell: |
+            yum -q list installed xorg-x11.*
+            yum -q list installed xserver-xorg.*           
+      register: xorg_pkgs
+      failed_when:
+         xorg_pkgs.rc == 0
+      tags:
+        - xorg_pkgs
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure avahi is not enabled and not running 
+- block:
+    - name: Ensure Avahi Server is not enabled and not running 
+      shell:  "{{ item }}"
+      failed_when: >
+         avahi_disabled.rc == 0
+      register: avahi_server_enabled
+      with_items:
+        - systemctl is-enabled avahi-daemon
+        - systemctl status avahi-daemon      
+      tags:
+        - avahi_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+       
+# Ensure cups is not enabled and not running 
+- block:
+    - name: Ensure cups is not enabled and not running 
+      shell:  "{{ item }}"
+      failed_when: >
+         cups_disabled.rc == 0
+      register: cups_disabled
+      with_items:
+        - systemctl is-enabled cups
+        - systemctl status cups    
+      tags:
+        - cups_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+ 
+# Ensure DHCP is not enabled and not running 
+- block:
+    - name: Ensure dhcp is not enabled and not running 
+      shell:  "{{ item }}"
+      failed_when: >
+         dhcpd_disabled.rc == 0
+      register: dhcpd_disabled
+      with_items:
+        - systemctl is-enabled dhcpd
+        - systemctl status dhcpd    
+      tags:
+        - dhcpd_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+          
+               
+# Ensure LDAP server is not enabled and not running 
+- block:
+    - name: Ensure slapd is not enabled and not running 
+      shell:  "{{ item }}"
+      failed_when: >
+         slapd_disabled.rc == 0
+      register: dhcpd_disabled
+      with_items:
+        - systemctl is-enabled slapd
+        - systemctl status slapd    
+      tags:
+        - slapd_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+# Ensure NFS and RPC are not enabled
+- block:
+    - name: Ensure NFS and RPC are not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         nfs_rcp_disabled.rc == 0
+      register: dhcpd_disabled
+      with_items:
+        - systemctl is-enabled nfs
+        - systemctl status nfs   
+        - systemctl is-enabled nfs-server
+        - systemctl status nfs-server   
+        - systemctl is-enabled rpcbind
+        - systemctl status rpcbind                    
+      tags:
+        - nfs_rpc_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure DNS Server is not enabled
+- block:
+    - name: Ensure DNS Server is not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         named_disabled.rc == 0
+      register: named_disabled
+      with_items:
+        - systemctl is-enabled named
+        - systemctl status named    
+      tags:
+        - named_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+ 
+# Ensure FTP Server is not enabled
+- block:
+    - name: Ensure FTP Server is not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         vsftpd_disabled.rc == 0
+      register: vsftpd_disabled
+      with_items:
+        - systemctl is-enabled vsftpd
+        - systemctl status vsftpd    
+      tags:
+        - vsftpd_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure HTTP server is not enabled
+- block:
+    - name: Ensure HTTP server is not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         httpd_disabled.rc == 0
+      register: httpd_disabled
+      with_items:
+        - systemctl is-enabled httpd
+        - systemctl status httpd    
+      tags:
+        - httpd_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure IMAP and POP3 server is not enabled
+- block:
+    - name: Ensure IMAP and POP3 server is not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         dovecot_disabled.rc == 0
+      register: dovecot_disabled
+      with_items:
+        - systemctl is-enabled dovecot
+        - systemctl status dovecot    
+      tags:
+        - dovecot_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure Samba is not enabled
+- block:
+    - name: Ensure Samba is not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         samba_disabled.rc == 0
+      register: samba_disabled
+      with_items:
+        - systemctl is-enabled smb
+        - systemctl status smb    
+      tags:
+        - samba_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure HTTP Proxy Server is not enabled
+- block:
+    - name: Ensure HTTP Proxy Server is not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         squid_disabled.rc == 0
+      register: squid_disabled
+      with_items:
+        - systemctl is-enabled squid
+        - systemctl status squid    
+      tags:
+        - squid_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+  
+  
+# Ensure SNMP Server is not enabled
+- block:
+    - name: Ensure SNMP Server is not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         snmpd_disabled.rc == 0
+      register: snmpd_disabled
+      with_items:
+        - systemctl is-enabled snmpd
+        - systemctl status snmpd    
+      tags:
+        - snmpd_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+ 
+# Ensure mail transfer agent is configured for local-only mode
+- block:
+    - name: Ensure mail transfer agent is configured for local-only mode
+      shell: netstat -an | grep LIST | grep ":25[[:space:]]" | egrep -q '127.0.0.1:25|::1:25'    
+      tags:
+        - sticky_bit_wr_dir
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure NIS Server is not be installed, enabled or running 
+- block:
+    - name: Ensure NIS Server is not be installed, enabled or running
+      shell:  "{{ item }}"
+      failed_when: >
+         nis_disabled.rc == 0
+      register: nis_disabled
+      with_items:
+        - yum -q list installed ypbind
+        - systemctl is-enabled ypserv
+        - systemctl status ypserv    
+      tags:
+        - nis_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure rsh server is not be installed, enabled or running
+- block:
+    - name: Ensure rsh Server is not be installed, enabled or running
+      shell:  "{{ item }}"
+      failed_when: >
+         rsh_disabled.rc == 0
+      register: rsh_disabled
+      with_items:
+        - - yum -q list installed rsh
+        - systemctl is-enabled rsh.socket
+        - systemctl status rsh.socket    
+        - systemctl is-enabled rlogin.socket
+        - systemctl status rlogin.socket
+        - systemctl is-enabled rexec.socket
+        - systemctl status rexec.socket
+      tags:
+        - rsh_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure telnet server is not enabled
+- block:
+    - name: Ensure telnet Server is not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         telnet_server_disabled.rc == 0
+      register: telnet_server_disabled
+      with_items:
+        - systemctl is-enabled telnet.socket
+        - systemctl status telnet.socket
+      tags:
+        - telnet_server_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure tftp server is not enabled
+- block:
+    - name: Ensure tftp Server is not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         tftp_server_disabled.rc == 0
+      register: tftp_server_disabled
+      with_items:
+        - systemctl is-enabled tftp.socket
+        - systemctl status tftp.socket
+      tags:
+        - tftp_server_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure rsync service is not enabled
+- block:
+    - name: Ensure rsync service is not enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         rsync_service_disabled.rc == 0
+      register: rsync_service_disabled
+      with_items:
+        - systemctl is-enabled rsyncd
+        - systemctl status rsyncd
+      tags:
+        - rsync_service_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+# Ensure talk client should not be installed, enabled or running
+- block:
+    - name: Ensure talk client should not be installed, enabled or running
+      shell:  "{{ item }}"
+      failed_when: >
+         talk_service_disabled.rc == 0
+      register: talk_service_disabled
+      with_items:
+        - systemctl is-enabled ntalk
+        - systemctl status ntalk
+        - yum -q list installed talk        
+      tags:
+        - talk_service_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure LDAP client is not installed
+- block:
+    - name: Ensure LDAP client is not installed
+      shell:  "{{ item }}"
+      failed_when: >
+         ldap_client_installed.rc == 0
+      register: ldap_client_installed
+      with_items:
+        - yum -q list installed openldap-clients        
+      tags:
+        - ldap_client_installed
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+        
+# Ensure IP forwarding is disabled
+- block:
+    - name: Ensure IP forwarding is disabled
+      shell: |
+           sysctl net.ipv4.ip_forward | grep 0 
+          # && grep -iR net.ipv4.ip_forward /etc/sysctl.conf* | grep 0
+      tags:
+        - ip_forward_disabled
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure packet redirect sending is disabled
+- block:
+    - name: Ensure packet redirect sending is disabled
+      shell:  sysctl "{{ item }}" | grep 0  
+      failed_when: >
+           packet_redirection_disabled.rc != 0
+      register: packet_redirection_disabled
+      with_items:
+        - net.ipv4.conf.all.send_redirects
+        - net.ipv4.conf.default.send_redirects
+      tags:
+        - packet_redirection_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure source routed packets are not accepted
+- block:
+    - name: Ensure source routed packets are not accepted
+      shell:  sysctl "{{ item }}" | grep 0  
+      failed_when: >
+           source_routed_packet_drop.rc != 0
+      register: source_routed_packet_drop
+      with_items:
+        - net.ipv4.conf.all.accept_source_route
+        - net.ipv4.conf.default.accept_source_route
+      tags:
+        - source_routed_packet_drop
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+# Ensure ICMP redirects are not accepted
+- block:
+    - name: Ensure ICMP redirects are not accepted
+      shell:  sysctl "{{ item }}" | grep 0  
+      failed_when: >
+           icmp_redirect.rc != 0
+      register: icmp_redirect
+      with_items:
+        - net.ipv4.conf.default.accept_redirects
+        - net.ipv4.conf.all.accept_redirects
+      tags:
+        - icmp_redirect
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+# Ensure secure ICMP redirects are not accepted
+- block:
+    - name: Ensure secure ICMP redirects are not accepted
+      shell:  sysctl "{{ item }}" | grep 0  
+      failed_when: >
+           secure_icmp_redirect.rc != 0
+      register: secure_icmp_redirect
+      with_items:
+        - net.ipv4.conf.all.secure_redirects
+        - net.ipv4.conf.default.secure_redirects
+      tags:
+        - secure_icmp_redirect
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure suspicious packets are logged
+- block:
+    - name: Ensure suspicious packets are logged
+      shell:  sysctl "{{ item }}" | grep 1 
+      failed_when: >
+           ipv4_suspicious_packet_logged.rc != 0
+      register: ipv4_suspicious_packet_logged
+      with_items:
+        - net.ipv4.conf.all.log_martians
+        - net.ipv4.conf.default.log_martians
+      tags:
+        - ipv4_suspicious_packet_logged
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure broadcast ICMP requests are ignored
+- block:
+    - name: Ensure broadcast ICMP requests are ignored
+      shell:  sysctl "{{ item }}" | grep 1 
+      failed_when: >
+           broadcast_icmp_drop.rc != 0
+      register: broadcast_icmp_drop
+      with_items:
+        - net.ipv4.icmp_echo_ignore_broadcasts
+      tags:
+        - broadcast_icmp_drop
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure bogus ICMP responses are ignored
+- block:
+    - name: Ensure bogus ICMP responses are ignored
+      shell:  sysctl "{{ item }}" | grep 1 
+      failed_when: >
+           bogus_icmp_drop.rc != 0
+      register: bogus_icmp_drop
+      with_items:
+        - net.ipv4.icmp_ignore_bogus_error_responses
+      tags:
+        - bogus_icmp_drop
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure Reverse Path Filtering is enabled
+- block:
+    - name: Ensure Reverse Path Filtering is enabled
+      shell:  sysctl "{{ item }}" | grep 1 
+      failed_when: >
+           rev_path_filter_enabled.rc != 0
+      register: bogus_icmp_drop
+      with_items:
+        - net.ipv4.conf.all.rp_filter
+        - net.ipv4.conf.default.rp_filter
+      tags:
+        - rev_path_filter_enabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure TCP SYN Cookies is enabled
+- block:
+    - name: Ensure TCP SYN Cookies is enabled
+      shell:  sysctl "{{ item }}" | grep 1 
+      failed_when: >
+           tcp_syn_cookies_enabled.rc != 0
+      register: tcp_syn_cookies_enabled
+      with_items:
+        - net.ipv4.tcp_syncookies
+      tags:
+        - tcp_syn_cookies_enabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure IPv6 router advertisements are not accepted
+- block:
+    - name: Ensure IPv6 router advertisements are not accepted
+      shell:  sysctl "{{ item }}" | grep 0
+      failed_when: >
+           ipc6_router_adv_not_accept.rc != 0
+      register: ipc6_router_adv_not_accept
+      with_items:
+        - net.ipv6.conf.all.accept_ra
+        - net.ipv6.conf.default.accept_ra
+      tags:
+        - ipc6_router_adv_not_accept
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure IPv6 redirects are not accepted
+- block:
+    - name: Ensure IPv6 redirects are not accepted
+      shell:  sysctl "{{ item }}" | grep 0
+      failed_when: >
+           ipc6_accept_redirects.rc != 0
+      register: ipc6_accept_redirects
+      with_items:
+        - net.ipv6.conf.all.accept_redirects
+        - net.ipv6.conf.default.accept_redirects
+      tags:
+        - ipc6_accept_redirects
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure IPv6 is disabled
+- block:
+    - name: Ensure IPv6 is disabled
+      shell:  "{{ item }}"
+      failed_when: >
+           ensure_ipv6_disabled.rc != 0
+      register: ensure_ipv6_disabled
+      with_items:
+        - grep "^\s*linux.*.ipv6.disable=1" /boot/grub2/grub.cfg
+        - grep '^\s*GRUB_CMDLINE_LINUX.*.ipv6.disable=1' /etc/sysconfig/grub
+      tags:
+        - ensure_ipv6_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure TCP Wrappers is installed
+- block:
+    - name: Ensure TCP Wrappers is installed
+      shell:  "{{ item }}"
+      failed_when: >
+         tcp_wrappers_installed.rc != 0
+      register: tcp_wrappers_installed
+      with_items:
+        - yum -q list tcp_wrappers       
+        - yum -q list tcp_wrappers-libs       
+      tags:
+        - tcp_wrappers_installed
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure /etc/hosts.allow exist and permission are configured
+- block:
+    - name: Ensure /etc/hosts.allow exist and permission are configured
+      shell:  "{{ item }}"
+      failed_when: >
+         check_host_allow.rc != 0
+      register: check_host_allow
+      with_items:
+        - test -f /etc/hosts.allow
+        - stat -L -c "%a %u %g" /etc/hosts.allow | egrep "644 0 0"     
+      tags:
+        - check_host_allow
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure /etc/hosts.allow exist and permission are configured
+- block:
+    - name: Ensure /etc/hosts.allow exist and permission are configured
+      shell:  "{{ item }}"
+      failed_when: >
+         check_host_deny.rc != 0
+      register: check_host_deny
+      with_items:
+        - test -f /etc/hosts.deny
+        - egrep '^ALL: ALL' /etc/hosts.deny
+        - stat -L -c "%a %u %g" /etc/hosts.deny | egrep "644 0 0"
+      tags:
+        - check_host_deny
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure DCCP is disabled
+- block:
+    - name: Ensure DCCP is disabled
+      shell: modprobe -n -v dccp
+      failed_when: > 
+         "/bin/true" not in modconf_dccp.stdout
+      register: modconf_dccp
+      tags:
+        - dccp
+
+    - name: Ensure DCCP module is not loaded
+      shell: lsmod | grep dccp
+      failed_when: >
+         lsmod_dccp.rc == 0
+      register: lsmod_dccp
+      tags:
+        - dccp
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+    
+  rescue:
+     - set_fact: 
+         _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure SCTP is disabled
+- block:
+    - name: Ensure sctp is disabled
+      shell: modprobe -n -v sctp
+      failed_when: > 
+         "/bin/true" not in modconf_sctp.stdout
+      register: modconf_sctp
+      tags:
+        - sctp
+
+    - name: Ensure sctp module is not loaded
+      shell: lsmod | grep sctp
+      failed_when: >
+         lsmod_sctp.rc == 0
+      register: lsmod_sctp
+      tags:
+        - sctp
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+    
+  rescue:
+     - set_fact: 
+         _failed: "{{ _failed | int + 1 }}"
+
+# Ensure RDS is disabled - rds
+- block:
+    - name: Ensure rds is disabled
+      shell: modprobe -n -v rds
+      failed_when: > 
+         "/bin/true" not in modconf_rds.stdout
+      register: modconf_rds
+      tags:
+        - rds
+
+    - name: Ensure rds module is not loaded
+      shell: lsmod | grep rds
+      failed_when: >
+         lsmod_rds.rc == 0
+      register: lsmod_rds
+      tags:
+        - rds
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+    
+  rescue:
+     - set_fact: 
+         _failed: "{{ _failed | int + 1 }}"
+
+# Ensure TIPC is disabled - tipc
+- block:
+    - name: Ensure tipc is disabled
+      shell: modprobe -n -v tipc
+      failed_when: > 
+         "/bin/true" not in modconf_tipc.stdout
+      register: modconf_tipc
+      tags:
+        - tipc
+
+    - name: Ensure tipc module is not loaded
+      shell: lsmod | grep tipc
+      failed_when: >
+         lsmod_tipc.rc == 0
+      register: lsmod_tipc
+      tags:
+        - tipc
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+    
+  rescue:
+     - set_fact: 
+         _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure iptables is installed
+- block:
+    - name: Ensure iptables is installed
+      shell:  "{{ item }}"
+      failed_when: >
+         iptables_installed.rc != 0
+      register: iptables_installed
+      with_items:
+        - yum -q list iptables       
+      tags:
+        - iptables_installed
+        - iptables
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure default deny firewall policy
+- block:
+    - name: Ensure default deny firewall policy
+      shell: |
+        iptables -L | grep "-P Chain INPUT {{ item }}"
+        iptables -L | grep "-P Chain OUTPUT {{ item }}"
+        iptables -L | grep "-P Chain FORWARD {{ item }}"
+      failed_when: >
+         iptables_default_deny.rc != 0
+      with_items:
+        - DROP
+        - REJECT
+      tags:
+        - iptables_default_deny
+        - iptables
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure loopback traffic is configured
+- block:
+    - name: Ensure loopback traffic is configured
+      shell: |
+        "iptables -L | grep {{ item }}"
+      failed_when: >
+         iptables_loopback_traffic.rc != 0
+      with_items:
+        - '-A INPUT -i lo -j ACCEPT'
+        - '-A OUTPUT -o lo -j ACCEPT'
+        - '-A INPUT -s 127.0.0.0/8 -j DROP'
+      tags:
+        - iptables_loopback_traffic
+        - iptables
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure outbound and established connections are configured
+- block:
+    - name: Ensure outbound and established connections are configured
+      debug:
+        msg: "Skipped because this benchmark depends on your particular site policy. You can override this control with one that meets your site policy for outbound and established connections."
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure firewall rules exist for all open ports      
+- block:
+    - name: Ensure firewall rules exist for all open ports
+      shell: |
+          for entry in `netstat -lntu  | egrep -v '127.0.0.1|::1|::' | awk '/[[:digit:]]/ {print $1":"$4}' | sort | uniq`; do
+            protocol=`echo $entry | awk -F: '{print $1}'`
+            port=`echo $entry | awk -F: '{print $NF}'`
+            rule_inbound="-A INPUT -p ${protocol} -m ${protocol} --dport ${port} -m state --state NEW,ESTABLISHED -j ACCEPT"
+            rule_outbound="-A OUTPUT -p ${protocol} -m ${protocol} --sport ${port} -m state --state ESTABLISHED -j ACCEPT"
+            iptables -L | grep -e "${rule_inbound}" || exit 1
+            iptables -L | grep -e "${rule_outbound}" || exit 1
+          done
+      register: iptables_rule_open_ports
+      failed_when: >
+        iptables_rule_open_ports.rc != 0
+      tags:
+        - iptables_rule_open_ports
+        - iptables
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure wireless interfaces are disabled
+- block:
+    - name: Ensure wireless interfaces are disabled
+      shell: iwconfig
+      failed_when: >
+        disable_wireless_interface.rc == 0
+      register: disable_wireless_interface
+      tags:
+        - disable_wireless_interface
+        - wireless
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure audit log storage size is configured
+- block:
+    - name: Ensure wireless interfaces are disabled
+      shell: grep max_log_file /etc/audit/auditd.conf
+      failed_when: >
+        audit_log_storage_size.rc != 0
+      register: audit_log_storage_size
+      tags:
+        - audit_log_storage_size
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure system is disabled when audit logs are full
+- block:
+    - name: Ensure system is disabled when audit logs are full
+      shell: "{{ item }}"
+      failed_when: >
+        audit_log_full.rc == 0
+      with_items:
+        - grep admin_space_left_action /etc/audit/auditd.conf | grep -i halt
+        - grep action_mail_acct /etc/audit/auditd.conf | grep -i root
+        - grep space_left_action /etc/audit/auditd.conf | grep -i email
+      register: audit_log_full
+      tags:
+        - audit_log_full
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure audit logs are not automatically deleted
+- block:
+    - name: Ensure audit logs are not automatically deleted
+      shell: "{{ item }}"
+      failed_when: >
+        audit_logs_are_not_automatically_deleted.rc != 0
+      register: audit_logs_are_not_automatically_deleted
+      with_items:
+        - grep max_log_file_action /etc/audit/auditd.conf | grep -i keep_logs
+        - grep action_mail_acct /etc/audit/auditd.conf | grep -i root
+        - grep space_left_action /etc/audit/auditd.conf | grep -i email
+
+      tags:
+        - audit_logs_are_not_automatically_deleted
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure auditd service is enabled and running 
+- block:
+    - name: Ensure auditd service is enabled and running
+      shell:  "{{ item }}"
+      failed_when: >
+         auditd_service_is_enabled.rc != 0
+      register: auditd_service_is_enabled
+      with_items:
+        - systemctl is-enabled auditd
+        - systemctl status auditd    
+      tags:
+        - auditd_service_is_enabled
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+
+# Ensure auditing for processes that start prior to auditd is enabled
+- block:
+    - name: Ensure auditing for processes that start prior to auditd is enabled
+      shell: grep "^\s*linux" /boot/grub2/grub.cfg|grep audit=1
+      tags:
+        - audit
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure events that modify date and time information are collected
+- block:
+    - name: Ensure events that modify date and time information are collected
+      shell: grep time-change /etc/audit/audit.rules
+      tags:
+        - audit
+        - events_that_modify_date_and_time_information_are_collected
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure events that modify user/group information are collected
+- block:
+    - name: Ensure events that modify user/group information are collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         modify_usergroup_audit_collection.rc != 0
+      register: modify_usergroup_audit_collection
+      with_items:
+        - '-w /etc/group -p wa -k identity'
+        - '-w /etc/passwd -p wa -k identity'
+        - '-w /etc/gshadow -p wa -k identity'
+        - '-w /etc/shadow -p wa -k identity'
+        - '-w /etc/security/opasswd -p wa -k identity'
+      tags:
+        - modify_usergroup_audit_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure events that modify the system's network environment are collected
+- block:
+    - name: Ensure events that modify the system's network environment are collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         modify_network_audit_collection.rc != 0
+      register: modify_network_audit_collection
+      with_items:
+        - '-a always,exit -F arch=b32 -S sethostname -S setdomainname -k system-locale'
+        - '-w /etc/sysconfig/network-scripts[/]? -p wa -k system-locale'
+        - '-w /etc/issue -p wa -k system-locale'
+        - '-w /etc/issue.net -p wa -k system-locale'
+        - '-w /etc/hosts -p wa -k system-locale'
+        - '-w /etc/sysconfig/network -p wa -k system-locale'
+      tags:
+        - modify_network_audit_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure events that modify the system's Mandatory Access Controls are collected
+- block:
+    - name: Ensure events that modify the system's network environment are collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         mac_policy_audit_collection.rc != 0
+      register: mac_policy_audit_collection
+      with_items:
+        - MAC-policy
+      tags:
+        - mac_policy_audit_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure login and logout events are collected
+- block:
+    - name: Ensure login and logout events are collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         logout_event_audit_collection.rc != 0
+      register: logout_event_audit_collection
+      with_items:
+        - '-w /var/run/faillock/ -p wa -k logins'
+        - '-w /var/log/lastlog -p wa -k logins'
+      tags:
+        - logout_event_audit_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure session initiation information is collected
+- block:
+    - name: Ensure session initiation information is collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         session_initiation_information_audit_collection.rc != 0
+      register: session_initiation_information_audit_collection
+      with_items:
+        - '-w /var/run/utmp -p wa -k session'
+        - '-w /var/log/wtmp -p wa -k logins'
+        - '-w /var/log/btmp -p wa -k logins'
+      tags:
+        - session_initiation_information_audit_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure discretionary access control permission modification events are collected
+- block:
+    - name: Ensure discretionary access control permission modification events are collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         perm_mod_audit_collection.rc != 0
+      register: perm_mod_audit_collection
+      with_items:
+        - perm_mod
+      tags:
+        - perm_mod_audit_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure unsuccessful unauthorized file access attempts are collected
+- block:
+    - name: Ensure unsuccessful unauthorized file access attempts are collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         unath_file_Access_audit_collection.rc != 0
+      register: unath_file_Access_audit_collection
+      with_items:
+        - access
+      tags:
+        - unath_file_Access_audit_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure use of privileged commands is collected
+- block:
+    - name: Ensure use of privileged commands is collected
+      shell: |
+           for privileged_command in $(find / -xdev -perm -4000 -o -perm -2000 -type f); do 
+              check="-a always,exit -S all -F path=${privileged_command} -F perm=x -F auid>=1000 -F auid!=-1 -F key=privileged"
+              grep -e "${check}" /etc/audit/audit.rules || exit 1
+           done
+      failed_when: >
+         privileged_cmd_collection.rc != 0
+      register: privileged_cmd_collection
+      tags:
+        - privileged_cmd_collection
+        - audit
+#                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure successful file system mounts are collected
+- block:
+    - name: Ensure successful file system mounts are collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         successful_file_system_mounts_collection.rc != 0
+      register: successful_file_system_mounts_collection
+      with_items:
+        - '-a always,exit.*.auid>=1000.*.mounts'
+      tags:
+        - successful_file_system_mounts_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure file deletion events by users are collected
+- block: 
+    - name: Ensure file deletion events by users are collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         file_deletion_events_by_users_collection.rc != 0
+      register: file_deletion_events_by_users_collection
+      with_items:
+        - '-a always,exit.*.auid>=1000.*.delete'
+      tags:
+        - file_deletion_events_by_users_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+# Ensure changes to system administration scope (sudoers) is collected        
+- block:
+    - name: Ensure changes to system administration scope (sudoers) is collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         change_to_system_administration_scope_collection.rc != 0
+      register: change_to_system_administration_scope_collection
+      with_items:
+        - '-w /etc/sudoers -p wa -k scope'
+        - '-w /etc/sudoers.d.*.-p wa -k scope'
+      tags:
+        - change_to_system_administration_scope_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure system administrator actions (sudolog) are collected
+- block:
+    - name: Ensure system administrator actions (sudolog) are collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         system_administrator_actions_sudolog_collection.rc != 0
+      register: system_administrator_actions_sudolog_collection
+      with_items:
+        - '-w /var/log/sudo.log -p wa -k actions'
+      tags:
+        - system_administrator_actions_sudolog_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+# Ensure kernel module loading and unloading is collected        
+- block:
+    - name: Ensure kernel module loading and unloading is collected
+      shell:  grep -e "{{ item }}" /etc/audit/audit.rules
+      failed_when: >
+         kernel_module_loading_and_unloading_collection.rc != 0
+      register: kernel_module_loading_and_unloading_collection
+      with_items:
+        - '-w /sbin/insmod.*.modules'
+        - '-w /sbin/rmmod.*.modules'
+        - '-w /sbin/modprobe.*.modules'
+        - '-a always,exit.*.delete_module.*.modules'
+      tags:
+        - kernel_module_loading_and_unloading_collection
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+# Ensure the audit configuration is immutable   
+- block:
+    - name: Ensure the audit configuration is immutable
+      shell:   grep "^\s*[^#]" /etc/audit/audit.rules | tail -1 | grep '\-e 2'
+      failed_when: >
+         audit_configuration_is_immutable.rc != 0
+      register: audit_configuration_is_immutable
+      tags:
+        - audit_configuration_is_immutable
+        - audit
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+        
+# Ensure rsyslog Service is installed, running and enabled
+- block:
+    - name: Is rsyslog installed
+      shell: yum -q list installed rsyslog
+      register: rsyslog_installed
+      ignore_errors: yes
+      
+    - name: Ensure rsyslog Service is installed, running and enabled
+      shell:  "{{ item }}"
+      failed_when: >
+         rsyslog_enabled.rc != 0      
+      register: rsyslog_enabled
+      when: rsyslog_installed.rc == 0 
+      with_items:
+         - yum -q list installed rsyslog 
+         - systemctl is-enabled rsyslog
+         - systemctl status rsyslog
+      tags:
+        - rsyslog_enabled
+        - rsyslog
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure logging is configured
+- block:
+    - name: Ensure logging is configured
+      debug:
+        msg: "Review the contents of the /etc/rsyslog.conf file to ensure appropriate logging is set. In addition, run the following command and verify that the log files are logging information: ls -la /var/log/"
+      tags:
+        - rsyslog
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"  
+        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure rsyslog default file permissions configured
+- block:
+    - name: Ensure rsyslog default file permissions configured
+      shell: grep -iR ^\$FileCreateMode --include  \*.conf /etc/rsyslog.*
+      failed_when: >
+         rsyslog_default_file_permissions.rc != 0
+      register: rsyslog_default_file_permissions
+      when: rsyslog_installed.rc == 0 
+      tags:
+        - rsyslog_default_file_permissions
+        - rsyslog
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+
+# Ensure rsyslog is configured to send logs to a remote log host
+- block:
+    - name: Ensure rsyslog is configured to send logs to a remote log host
+      shell: grep -iR "^*.*[^I][^I]*@" --include  \*.conf /etc/rsyslog.*
+      failed_when: >
+         rsyslog_configured_to_send_logs_to_remote_loghost.rc != 0
+      register: rsyslog_configured_to_send_logs_to_remote_loghost
+      when: rsyslog_installed.rc == 0 
+      tags:
+        - rsyslog_configured_to_send_logs_to_remote_loghost
+        - rsyslog
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+        
+        
+# Ensure remote rsyslog messages are only accepted on designated log hosts.
+- block:
+    - name: Ensure remote rsyslog messages are only accepted on designated log hosts.
+      debug:
+        msg: "Unable to determine which remote host(s) rsyslog should accept messages from."
+      tags:
+        - rsyslog
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"  
+        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure syslog-ng service is installed, enabled and running
+- block:
+    - name: Is syslog-ng installed
+      shell: yum -q list installed syslog-ng
+      register: syslog_ng_installed
+      ignore_errors: yes
+
+    - name: Ensure syslog-ng service is installed, enabled and running
+      shell:  "{{ item }}"
+      failed_when: >
+         rsyslog_enabled.rc != 0
+      register: rsyslog_enabled
+      when: syslog_ng_installed.rc == 0
+      with_items:
+         - systemctl is-enabled syslog-ng
+         - systemctl status syslog-ng
+      tags:
+        - syslog_ng
+        - syslog
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure logging is configured
+- block:
+    - name: Ensure logging is configured
+      debug:
+        msg: "Edit the log lines in the /etc/syslog-ng/syslog-ng.conf file as appropriate for your environment."
+      tags:
+        - syslog
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"  
+        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure syslog-ng default file permissions configured
+- block:
+    - name: Ensure syslog-ng default file permissions configured
+      shell:  grep -e "{{ item }}" /etc/syslog-ng/syslog-ng.conf
+      failed_when: >
+         rsyslog_enabled.rc != 0
+      register: rsyslog_enabled
+      when: syslog_ng_installed.rc == 0
+      with_items:
+         - 'options.*.perm'
+      tags:
+        - syslog_ng
+        - syslog
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure syslog-ng is configured to send logs to a remote log host
+- block:
+    - name: Ensure syslog-ng is configured to send logs to a remote log host
+      debug:
+        msg: "Configure a remote log host as appropriate for your environment."
+      tags:
+        - syslog
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"  
+        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure remote syslog-ng messages are only accepted on designated log hosts
+- block:
+    - name: Ensure remote syslog-ng messages are only accepted on designated log hosts
+      debug:
+        msg: 'Review the /etc/syslog-ng/syslog-ng.conf file and verify the following lines are configured appropriately on designated log hosts:
+  
+      source net{ tcp(); };
+      destination remote { file("/var/log/remote/${FULLHOST}-log"); };
+      log { source(net); destination(remote); };
+  
+    On non designated log hosts edit the /etc/syslog-ng/syslog-ng.conf file and remove or edit any sources that accept network sourced log messages.'
+      tags:
+        - syslog
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"  
+        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure rsyslog or syslog-ng is installed        
+- block:
+    - name: Ensure rsyslog or syslog-ng is installed
+      shell:
+        yum -q list installed rsyslog && exit 0;
+        yum -q list installed syslog-ng || exit 1
+      tags:
+
+        - logging
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure permissions on all logfiles are configured
+- block:
+    - name: Ensure permissions on all logfiles are configured
+      shell: find /var/log -type f -perm /o+r
+      tags:
+        - permissions_on_logfiles_audit
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure logrotate is configured
+- block:
+    - name: Ensure logrotate is configured
+      debug:
+        msg: 'Review /etc/logrotate.conf and /etc/logrotate.d/ * and verify logs are rotated according to site policy.'
+      tags:
+        - Ensure_logrotate_is_configured
+        - logrotate
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"  
+        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure cron daemon is enabled
+- block:
+    - name: Ensure cron daemon is enabled 
+      shell:  "{{ item }}"
+      failed_when: >
+         crond_disabled.rc == 0      
+      register: crond_disabled          
+      with_items:
+         - yum -q list installed crond 
+         - systemctl is-enabled crond 
+      tags:
+        - crond_disabled
+                
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure permissions on /etc/crontab are configured
+- block:
+    - name: Ensure permissions on /etc/crontab are configured
+      shell: stat -L -c "%a %u %g" /etc/crontab | egrep ".00 0 0"
+      tags:
+        - cron_etc_crontab_permissions
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure permissions on /etc/cron.hourly are configured
+- block:
+    - name: Ensure permissions on /etc/cron.hourly are configured
+      shell: stat -L -c "%a %u %g" /etc/cron.hourly | egrep ".00 0 0"
+      tags:
+        - cron_hourly_permissions
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure permissions on /etc/cron.daily are configured
+- block:
+    - name: Ensure permissions on /etc/cron.daily are configured
+      shell: stat -L -c "%a %u %g" /etc/cron.daily | egrep ".00 0 0"
+      tags:
+        - cron_daily_permissions
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure permissions on /etc/cron.weekly are configured
+- block:
+    - name: Ensure permissions on /etc/cron.weekly are configured
+      shell: stat -L -c "%a %u %g" /etc/cron.weekly | egrep ".00 0 0"
+      tags:
+        - cron_weekly_permissions
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure permissions on /etc/cron.monthly are configured
+- block:
+    - name: Ensure permissions on /etc/cron.monthly are configured
+      shell: stat -L -c "%a %u %g" /etc/cron.monthly | egrep ".00 0 0"
+      tags:
+        - cron_monthly_permissions
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure permissions on /etc/cron.d are configured
+- block:
+    - name: Ensure permissions on /etc/cron.d are configured
+      shell: stat -L -c "%a %u %g" /etc/cron.d | egrep ".00 0 0"
+      tags:
+        - cdron_d_permissions
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure at/cron is restricted to authorized users
+- block:
+    - name: Ensure at/cron is restricted 
+      shell: "{{ item }}"
+      failed_when: >
+        at_cron_deny_not_exist.rc == 0
+      register: at_cron_deny_not_exist
+      with_items:
+        - stat -L /etc/at.deny
+        - stat -L /etc/cron.deny
+      tags:
+        - cdron_d_permissions
+
+    - name: Ensure at/cron is restricted to authorized users 
+      shell: "{{ item }}"
+      failed_when: >
+        at_cron_restriction.rc != 0
+      register: at_cron_restriction
+      with_items:
+        - stat -L -c "%a %u %g" /etc/at.allow | egrep ".00 0 0"
+        - stat -L -c "%a %u %g" /etc/cron.allow | egrep ".00 0 0"
+      tags:
+        - cdron_d_permissions
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure permissions on /etc/ssh/sshd_config are configured
+- block:
+    - name: Ensure permissions on /etc/ssh/sshd_config are configured
+      shell: "{{ item }}"
+      failed_when: >
+        at_cron_restriction.rc != 0
+      register: at_cron_restriction
+      with_items:
+        - stat -L /etc/ssh/sshd_config
+        - stat -L -c "%a %u %g" /etc/ssh/sshd_config | egrep ".00 0 0"
+      tags:
+        - sshd_config 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure SSH Protocol is set to 2
+- block:
+    - name: Ensure SSH Protocol is set to 2
+      shell: "{{ item }}"
+      failed_when: >
+        sshd_config_protocol.rc != 0
+      register: sshd_config_protocol
+      with_items:
+        - 'grep "^Protocol 2" /etc/ssh/sshd_config'
+      tags:
+        - sshd_config_protocol 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH LogLevel is set to INFO
+- block:
+    - name: Ensure SSH LogLevel is set to INFO
+      shell: "{{ item }}"
+      failed_when: >
+        sshd_config_loglevel.rc != 0
+      register: sshd_config_loglevel
+      with_items:
+        - 'grep "^LogLevel INFO" /etc/ssh/sshd_config'
+      tags:
+        - sshd_config_loglevel 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH X11 forwarding is disabled 
+- block:
+    - name: Ensure SSH X11 forwarding is disabled 
+      shell: "{{ item }}"
+      failed_when: >
+        sshd_config_protocol.rc != 0
+      register: sshd_config_protocol
+      with_items:
+        -  'grep "^X11Forwarding no" /etc/ssh/sshd_config'
+      tags:
+        - sshd_config_protocol 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH MaxAuthTries is set to 4 or less
+- block:
+    - name: Ensure SSH MaxAuthTries is set to 4 or less
+      shell: |
+            [[ `awk '/^MaxAuthTries/ {print $NF}' /etc/ssh/sshd_config | xargs` -le 4 ]] 
+      failed_when: >
+        ssh_max_auth_tries.rc != 0
+      register: ssh_max_auth_tries
+      tags:
+        - ssh_max_auth_tries 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH IgnoreRhosts is enabled
+- block:
+    - name: Ensure SSH IgnoreRhosts is enabled
+      shell: "{{ item }}"
+      failed_when: >
+        ssh_ignore_rhosts.rc != 0
+      register: ssh_ignore_rhosts
+      with_items:
+        -  'grep "^IgnoreRhosts yes" /etc/ssh/sshd_config'
+      tags:
+        - ssh_ignore_rhosts 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH HostbasedAuthentication is disabled
+- block:
+    - name: Ensure SSH HostbasedAuthentication is disabled
+      shell: "{{ item }}"
+      failed_when: >
+        ssh_hostbased_authentication.rc != 0
+      register: ssh_hostbased_authentication
+      with_items:
+        - 'grep "^HostbasedAuthentication no" /etc/ssh/sshd_config'
+      tags:
+        - ssh_hostbased_authentication 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH root login is disabled
+- block:
+    - name: Ensure SSH root login is disabled
+      shell: "{{ item }}"
+      failed_when: >
+        ssh_permit_root_login.rc != 0
+      register: ssh_permit_root_login
+      with_items:
+        - 'grep "^PermitRootLogin no" /etc/ssh/sshd_config'
+      tags:
+        - ssh_permit_root_login 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH PermitEmptyPasswords is disabled
+- block:
+    - name: Ensure SSH PermitEmptyPasswords is disabled
+      shell: "{{ item }}"
+      failed_when: >
+        ssh_permit_empty_passwords.rc != 0
+      register: ssh_permit_empty_passwords
+      with_items:
+        - 'grep "^PermitEmptyPasswords no" /etc/ssh/sshd_config'
+      tags:
+        - ssh_permit_empty_passwords 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH PermitUserEnvironment is disabled
+- block:
+    - name: Ensure SSH PermitUserEnvironment is disabled
+      shell: "{{ item }}"
+      failed_when: >
+        ssh_permit_userenvironment.rc != 0
+      register: ssh_permit_userenvironment
+      with_items:
+        - 'grep "^PermitUserEnvironment no" /etc/ssh/sshd_config'
+      tags:
+        - ssh_permit_userenvironment 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure only approved MAC algorithms are used # need to add all ciphers logic - pending 
+- block:
+    - name: Ensure only approved MAC algorithms are used
+      shell: egrep -i "{{ item }}" /etc/ssh/sshd_config /etc/ssh/ssh_config
+      failed_when: >
+        ssh_permit_userenvironment.rc != 0
+      register: ssh_permit_userenvironment
+      with_items:
+        - "MACs"
+        - 'hmac-sha2-512-etm@openssh.com|hmac-sha2-256-etm@openssh.com|umac-128-etm@openssh.com|hmac-sha2-512|hmac-sha2-256|umac-128@openssh.com|curve25519-sha256@libssh.org|diffie-hellman-group-exchange-sha256'
+      tags:
+        - ssh_permit_userenvironment 
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH Idle Timeout Interval is configured
+- block:
+    - name: Ensure SSH Idle Timeout Interval is configured
+      shell: |
+        [[ `awk '/^ClientAliveInterval/ {print $NF}' /etc/ssh/sshd_config | xargs` -le 300 ]] 
+        [[ `awk '/^ClientAliveInterval/ {print $NF}' /etc/ssh/sshd_config | xargs` -ge 0 ]] 
+        [[ `awk '/^ClientAliveCountMax/ {print $NF}' /etc/ssh/sshd_config | xargs` -le 3 ]] 
+      failed_when: >
+        ssh_idle_timeout_interval.rc != 0
+      register: ssh_permit_userenvironment
+      tags:
+        - ssh_idle_timeout_interval
+        - ssh
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH LoginGraceTime is set to one minute or less
+- block:
+    - name: Ensure SSH LoginGraceTime is set to one minute or less
+      shell: |
+        [[ `awk '/^LoginGraceTime/ {print $NF}' /etc/ssh/sshd_config | xargs` -le 60 ]] 
+        [[ `awk '/^LoginGraceTime/ {print $NF}' /etc/ssh/sshd_config | xargs` -ge 0 ]] 
+      failed_when: >
+        login_gracetime.rc != 0
+      register: login_gracetime
+      tags:
+        - login_gracetime
+        - ssh
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure SSH access is limited
+- block:
+    - name: Ensure SSH access is limited
+      shell: |
+        egrep -e  '^\s*AllowUsers|AllowGroups|DenyUsers|DenyGroups'  /etc/ssh/sshd_config
+      failed_when: >
+        ssh_access_limited.rc != 0
+      register: ssh_access_limited
+      tags:
+        - ssh_access_limited
+        - ssh
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+        
+# Ensure SSH warning banner is configured
+- block:
+    - name: Ensure SSH warning banner is configured
+      shell:  grep "^Banner" /etc/ssh/sshd_config
+      failed_when: >
+        ssh_banner.rc != 0
+      register: ssh_banner
+      tags:
+        - ssh_idle_timeout_interval
+        - ssh
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure password creation requirements are configured
+- block:
+    - name: Ensure password creation requirements are configured
+      shell: "{{ item }}"
+      failed_when: >
+        passwd_quality.rc != 0
+      register: passwd_quality
+      with_items:
+        - grep pam_pwquality.so /etc/pam.d/password-auth
+        - grep pam_pwquality.so /etc/pam.d/system-auth
+        - grep ^minlen /etc/security/pwquality.conf
+        - grep ^dcredit /etc/security/pwquality.conf
+        - grep ^lcredit /etc/security/pwquality.conf
+        - grep ^ocredit /etc/security/pwquality.conf
+        - grep ^ucredit /etc/security/pwquality.conf
+      tags:
+        - passwd_quality
+        - ssh
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure lockout for failed password attempts is configured
+- block:
+    - name: Ensure lockout for failed password attempts is configured
+      shell: "{{ item }}"
+      failed_when: >
+        user_ac_lockout_failed_psw.rc != 0
+      register: user_ac_lockout_failed_psw
+      with_items:
+        - egrep -e  '^auth.*.required.*.pam_faillock.*.preauth.*.audit.*.silent.*.deny=5.*.unlock_time=900$' /etc/pam.d/system-auth
+        - egrep -e  '^auth.*.pam_faillock.*.authfail.*.audit.*.deny=5.*.unlock_time=900$' /etc/pam.d/system-auth
+        - egrep -e  '^auth.*.sufficient.*.pam_faillock.*.authsucc.*.audit.*.deny=5.*.unlock_time=900$' /etc/pam.d/system-auth
+        - egrep -e  '^auth.*.required.*.pam_faillock.*.preauth.*.audit.*.silent.*.deny=5.*.unlock_time=900$' /etc/pam.d/password-auth
+        - egrep -e  '^auth.*.pam_faillock.*.authfail.*.audit.*.deny=5.*.unlock_time=900$' /etc/pam.d/password-auth
+        - egrep -e  '^auth.*.sufficient.*.pam_faillock.*.authsucc.*.audit.*.deny=5.*.unlock_time=900$' /etc/pam.d/password-auth
+      tags:
+        - user_ac_lockout_failed_psw
+        - ssh
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure password reuse is limited
+- block:
+    - name: Ensure password reuse is limited
+      shell: "{{ item }}"
+      failed_when: >
+        pass_sha512_hashing.rc != 0
+      register: pass_sha512_hashing
+      with_items:
+        - authconfig --test | grep hashing | grep sha512
+        - egrep -e  '^password.*.sufficient.*.pam_unix.*.sha512' /etc/pam.d/password-auth
+        - egrep -e  '^password.*.sufficient.*.pam_unix.*.sha512' /etc/pam.d/system-auth
+      tags:
+        - pass_sha512_hashing
+        - ssh
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure password expiration is 365 days or less
+- block:
+    - name: Ensure password expiration is 365 days or less
+      shell: |
+          "[[ $(awk '/^\s*{{ item.key }}/ {print $NF}' /etc/login.defs | xargs) -le {{ item.value }} ]]"
+      failed_when: >
+        pass_exp_max.rc != 0
+      register: pass_exp_max
+      with_dict:
+         - PASS_MAX_DAYS: 365
+      tags:
+        - pass_exp_max
+        - ssh
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure minimum days between password changes is 7 or more
+- block:
+    - name: Ensure minimum days between password changes is 7 or more
+      shell: |
+          [[ $(awk '/^\s*{{ item.key }}/ {print $NF}' /etc/login.defs | xargs) -le {{ item.value }} ]]
+      failed_when: >
+        pass_exp_min.rc != 0
+      register: pass_exp_min
+      with_dict:
+        - PASS_MIN_DAYS: 7
+      tags:
+        - pass_exp_min
+        - ssh
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure password expiration warning days is 7 or more
+- block:
+    - name: Ensure password expiration warning days is 7 or more
+      shell: |
+          [[ $(awk '/^\s*{{ item.key }}/ {print $NF}' /etc/login.defs | xargs) -le {{ item.value }} ]]
+      failed_when: >
+        pass_sha512_hashing.rc != 0
+      register: pass_sha512_hashing
+      with_items:
+        - PASS_WARN_AGE: 7
+      tags:
+        - pass_sha512_hashing
+        - ssh
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure inactive password lock is 30 days or less
+- block:
+    - name: Ensure inactive password lock is 30 days or less
+      shell: |
+          [[ $(awk '/^\s*{{ item.key }}/ {print $NF}' /etc/login.defs | xargs) -le {{ item.value }} ]]
+      failed_when: >
+        psw_lock_min.rc != 0
+      register: psw_lock_min
+      with_items:
+        - INACTIVE: 30 
+      tags:
+        - psw_lock_min
+        - ssh
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure all users last password change date is in the past
+- block:
+    - name: Ensure all users last password change date is in the past
+      debug:
+        msg: "Type time_difference is currently not supported."
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure system accounts are non-login
+- block:
+    - name: Ensure system accounts are non-login
+      shell: |
+            grep "^{{ item }}" /etc/passwd || exit 1
+            [[ `awk -F: '/^{{ item }}/ {print $3}' /etc/passwd | xargs` -lt 1000 ]] || exit 1
+            [[ `awk -F: '/^{{ item }}/ {print $NF}' /etc/passwd | xargs` == '/sbin/nologin' ]] || exit 1
+      failed_when: >
+        system_account_no_login.rc != 0
+      register: system_account_no_login
+      with_items:
+        - root
+        - sync
+        - shutdown
+        - halt
+      tags:
+        - system_account_no_login
+        - ssh
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure default group for the root account is GID 0
+- block:
+    - name: Ensure default group for the root account is GID 0
+      shell: |
+            [[ `awk -F: '/^{{ item }}/ {print $4}' /etc/passwd | xargs` -eq 0 ]] 
+      failed_when: >
+        root_gid_0.rc != 0
+      register: root_gid_0
+      tags:
+        - root_gid_0
+        - ssh
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+
+# Ensure default user shell timeout is 900 seconds or less
+- block:
+    - name: Ensure default user shell timeout is 900 seconds or less
+      shell: |
+          [[ `awk '/^\s*TMOUT=/ {print $NF}' {{ item.key }} | xargs` -lt {{ item.value }} ]]
+      failed_when: >
+        shell_timeout_less_than_900.rc != 0
+      register: shell_timeout_less_than_900
+      with_items:
+        - /etc/bashrc: 900
+        - /etc/profile: 900
+      tags:
+        - shell_timeout_less_than_900
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+        
+# Ensure root login is restricted to system console
+- block:
+    - name: Ensure root login is restricted to system console
+      debug:
+        msg: "Review the file /etc/securetty and remove entries for any consoles that are not in a physically secure location."
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure access to the su command is restricted
+- block:
+    - name: Ensure access to the su command is restricted
+      shell: "{{ item }}"
+      failed_when: >
+        psw_lock_min.rc != 0
+      register: psw_lock_min
+      with_items:
+        - "egrep -e 's*auth.*.required.*.pam_wheel.so.*.use_uid' /etc/pam.d/su"
+      tags:
+        - psw_lock_min
+        - ssh
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Audit system file permissions
+- block:
+    - name: Audit system file permissions
+      debug:
+        msg: "Unable to audit system file permissions as this is should be configured based on your company policies."
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure permissions on /etc/passwd are configured  
+- block:
+    - name: Ensure permissions on /etc/passwd are configured  
+      shell: "{{ item }}"
+      failed_when: >
+        passwd_permission.rc != 0
+      register: passwd_permission
+      with_items:
+        - stat -L -c "%a %u %g" /etc/passwd | egrep "644 0 0"
+      tags:
+        - passwd_permission
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure permissions on /etc/shadow are configured
+- block:
+    - name: Ensure permissions on /etc/shadow are configured
+      shell: "{{ item }}"
+      failed_when: >
+        shadow_permission.rc != 0
+      register: shadow_permission
+      with_items:
+        - stat -L -c "%a %u %g" /etc/shadow | egrep "0 0 0"
+      tags:
+        - shadow_permission
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+
+# Ensure permissions on /etc/group are configured
+- block:
+    - name: Ensure permissions on /etc/group are configured
+      shell: "{{ item }}"
+      failed_when: >
+        group_permission.rc != 0
+      register: group_permission
+      with_items:
+        - stat -L -c "%a %u %g" /etc/group | egrep "644 0 0"
+      tags:
+        - group_permission
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+
+# Ensure permissions on /etc/gshadow are configured
+- block:
+    - name: Ensure permissions on /etc/gshadow are configured
+      shell: "{{ item }}"
+      failed_when: >
+        gshadow_permission.rc != 0
+      register: gshadow_permission
+      with_items:
+        - stat -L -c "%a %u %g" /etc/gshadow | egrep "0 0 0"
+      tags:
+        - gshadow_permission
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+
+# Ensure permissions on /etc/passwd- are configured
+- block:
+    - name: Ensure permissions on /etc/passwd- are configured
+      shell: "{{ item }}"
+      failed_when: >
+        passwd2_permission.rc != 0
+      register: passwd2_permission
+      with_items:
+        - stat -L -c "%a %u %g" /etc/passwd- | egrep "644 0 0"
+      tags:
+        - passwd2_permission
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+
+# Ensure permissions on /etc/shadow- are configured
+- block:
+    - name: Ensure permissions on /etc/shadow- are configured
+      shell: "{{ item }}"
+      failed_when: >
+        shadow2_permission.rc != 0
+      register: shadow2_permission
+      with_items:
+        - stat -L -c "%a %u %g" /etc/shadow- | egrep "000 0 0"
+      tags:
+        - shadow2_permission
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+
+# Ensure permissions on /etc/group- are configured
+- block:
+    - name: Ensure permissions on /etc/group- are configured
+      shell: "{{ item }}"
+      failed_when: >
+        perm_group2.rc != 0
+      register: perm_group2
+      with_items:
+        - stat -L -c "%a %u %g" /etc/group- | egrep "600 0 0"
+      tags:
+        - perm_group2
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure permissions on /etc/gshadow- are configured
+- block:
+    - name: Ensure permissions on /etc/gshadow- are configured
+      shell: "{{ item }}"
+      failed_when: >
+        perm_gshadow2.rc != 0
+      register: perm_gshadow2
+      with_items:
+        - stat -L -c "%a %u %g" /etc/gshadow- | egrep "600 0 0"
+      tags:
+        - perm_gshadow2
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure no world writable files exist
+- block:
+    - name: Ensure permissions on /etc/gshadow- are configured
+      shell: "{{ item }}"
+      failed_when: >
+        check_world_writable.rc != 0
+      register: check_world_writable
+      with_items:
+        - df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type f -perm -0777 | wc -l |grep 0
+      tags:
+        - check_world_writable
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+   
+# Ensure no unowned files or directories exist    
+- block:
+    - name: Ensure no unowned files or directories exist
+      shell: "{{ item }}"
+      failed_when: >
+        check_unowned_files.rc != 0
+      register: check_unowned_files
+      with_items:
+        -  df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -nouser | wc -l |grep 0
+      tags:
+        - check_unowned_files
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Ensure no ungrouped files or directories exist
+- block:
+    - name: Ensure no ungrouped files or directories exist
+      shell: "{{ item }}"
+      failed_when: >
+        check_ungrouped_files.rc != 0
+      register: check_ungrouped_files
+      with_items:
+        - df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -nogroup | wc -l |grep 0
+      tags:
+        - check_ungrouped_files
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact: 
+        _failed: "{{ _failed | int + 1 }}"  
+
+# Audit SUID executables
+- block:
+    - name: Audit SUID executables
+      shell: "{{ item }}"
+      failed_when: >
+        check_suid_executables.rc != 0
+      register: check_suid_executables
+      with_items:
+        - df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type f -perm -4000
+      tags:
+        - check_suid_executables
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"  
+        
+# Audit SGID executables
+- block:
+    - name: Audit SGID executables
+      shell: "{{ item }}"
+      failed_when: >
+        check_sgid_executables.rc != 0
+      register: check_sgid_executables
+      with_items:
+        - df --local -P | awk {'if (NR!=1) print $6'} | xargs -I '{}' find '{}' -xdev -type f -perm -4000
+      tags:
+        - check_sgid_executables
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"  
+        
+        
+# Ensure password fields are not empty
+- block:
+    - name: Audit SUID executables
+      shell: "{{ item }}"
+      failed_when: >
+        empty_passwd.rc != 0
+      register: empty_passwd
+      with_items:
+        - cat /etc/shadow | awk -F: '($2 == "" ) {j++;print $1; } END {exit j}'
+      tags:
+        - empty_passwd
+        - passwd
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"  
+    
+
+# Ensure no legacy \"+\" entries exist in /etc/passwd
+- block:
+    - name: Ensure no legacy \"+\" entries exist in /etc/passwd
+      shell: "{{ item }}"
+      failed_when: >
+        passwd_legacy_entry.rc != 0
+      register: passwd_legacy_entry
+      with_items:
+        - grep -c '^+' /etc/passwd | grep 0
+      tags:
+        - passwd_legacy_entry
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"  
+        
+# Ensure no legacy \"+\" entries exist in /etc/shadow
+- block:
+    - name: Ensure no legacy \"+\" entries exist in /etc/shadow
+      shell: "{{ item }}"
+      failed_when: >
+        shadow_legacy_entry.rc != 0
+      register: shadow_legacy_entry
+      with_items:
+        - grep -c '^+' /etc/shadow | grep 0
+      tags:
+        - shadow_legacy_entry
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"  
+        
+# Ensure no legacy \"+\" entries exist in /etc/group
+- block:
+    - name: Ensure no legacy \"+\" entries exist in /etc/group
+      shell: "{{ item }}"
+      failed_when: >
+        group_legacy_entry.rc != 0
+      register: group_legacy_entry
+      with_items:
+        - cat /etc/group | awk -F: '($2 == "" ) {j++;print $1; } END {exit j}'
+      tags:
+        - group_legacy_entry
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"  
+ 
+# Ensure root is the only UID 0 account 
+- block:
+    - name: Ensure root is the only UID 0 account 
+      shell: "{{ item }}"
+      failed_when: >
+        uid_zero_accounts_except_root.rc != 0
+      register: uid_zero_accounts_except_root
+      with_items:
+        - cat /etc/passwd | awk -F: '($3 == 0 && $1 != \"root\") {i++;print $1 } END {exit i}'
+      tags:
+        - uid_zero_accounts_except_root
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}" 
+
+# Ensure root PATH Integrity
+- block:
+    - name: Ensure root PATH Integrity
+      shell: |
+        [[ "{{ ansible_env.PATH }}" != '' ]]
+        for usr_path in `echo {{ ansible_env.PATH }} |  tr ':' '\n'`; do
+            [[ -d $usr_path ]] && stat -L -c "%a %u %g" $usr_path | egrep ".55 0 0" || exit 1
+            [[ $usr_path != '' ]]
+            [[ $usr_path != '.' ]]
+        done
+      failed_when: >
+        root_path_integrity.rc != 0
+      register: root_path_integrity
+      with_items:
+        - "{{ ansible_env.PATH }}" 
+      tags:
+        - root_path_integrity
+        - ssh
+        
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"        
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}" 
+        
+        
+# Ensure all users' home directories exist
+- block:
+    - name: Ensure all users' home directories exist
+      shell: |
+        IFS=$'\n'
+        nologin=('/sbin/nologin' '/usr/bin/nologin' '/bin/nologin' '/bin/false')
+        ignoresysuser=('root' 'halt' 'sync' 'shutdown')
+        for users in `cat /etc/passwd`; do
+            user=$(echo $users | awk -F: '{print $1}')
+            userhome=$(echo $users | awk -F: '{print $6}')
+            usershell=$(echo $users | awk -F: '{print $NF}')
+
+            if [[ -z $(printf '%s\n' "${nologin[@]}" | grep -w $usershell) ]] &&\
+            [[ -z $(printf '%s\n' "${ignoresysuser[@]}" | grep -w $user) ]]; then
+                # is home dir exist and dir
+                if [[ ! -d $userhome ]]; then
+                    echo "$user - $userhome not exist"
+                    exit 1
+                fi
+            fi
+        done
+      failed_when: >
+        users_home_dir_must_exist.rc != 0
+      register: users_home_dir_must_exist
+      tags:
+        - users_home_dir_must_exist
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure users' home directories permissions are 750 or more restrictive
+- block:
+    - name: Ensure users' home directories permissions are 750 or more restrictive
+      shell: |
+        IFS=$'\n'
+        nologin=('/sbin/nologin' '/usr/bin/nologin' '/bin/nologin' '/bin/false')
+        ignoresysuser=('root' 'halt' 'sync' 'shutdown')
+        for users in `cat /etc/passwd`; do
+            user=$(echo $users | awk -F: '{print $1}')
+            userhome=$(echo $users | awk -F: '{print $6}')
+            usershell=$(echo $users | awk -F: '{print $NF}')
+
+            if [[ -z $(printf '%s\n' "${nologin[@]}" | grep -w $usershell) ]] &&\
+            [[ -z $(printf '%s\n' "${ignoresysuser[@]}" | grep -w $user) ]]; then
+                # is home dir exist and dir
+                if [[ ! -d $userhome ]]; then
+                    echo "$user - $userhome not exist"
+                    exit 1
+                fi
+                stat -L -c "%a" $userhome | egrep '700|750|740|710'
+            fi
+        done
+      failed_when: >
+        users_home_dir_must_exist.rc != 0
+      register: users_home_dir_must_exist
+      tags:
+        - users_home_dir_must_exist
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure users own their home directories
+- block:
+    - name: Ensure users own their home directories
+      shell: |
+        IFS=$'\n'
+        nologin=('/sbin/nologin' '/usr/bin/nologin' '/bin/nologin' '/bin/false')
+        ignoresysuser=('root' 'halt' 'sync' 'shutdown')
+        for users in `cat /etc/passwd`; do
+            user=$(echo $users | awk -F: '{print $1}')
+            userhome=$(echo $users | awk -F: '{print $6}')
+            usershell=$(echo $users | awk -F: '{print $NF}')
+
+            if [[ -z $(printf '%s\n' "${nologin[@]}" | grep -w $usershell) ]] &&\
+            [[ -z $(printf '%s\n' "${ignoresysuser[@]}" | grep -w $user) ]]; then
+                # is home dir exist and dir
+                if [[ ! -d $userhome ]]; then
+                    echo "$user - $userhome not exist"
+                    exit 1
+                fi
+                stat -L -c "%U" $userhome | egrep $user
+            fi
+        done
+      failed_when: >
+        users_own_their_home_dir.rc != 0
+      register: users_own_their_home_dir
+      tags:
+        - users_own_their_home_dir
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+ 
+# Ensure users' dot files are not group or world writable
+- block:
+    - name: Ensure users own their home directories
+      shell: |
+        IFS=$'\n'
+        nologin=('/sbin/nologin' '/usr/bin/nologin' '/bin/nologin' '/bin/false')
+        ignoresysuser=('root' 'halt' 'sync' 'shutdown')
+        for users in `cat /etc/passwd`; do
+            user=$(echo $users | awk -F: '{print $1}')
+            userhome=$(echo $users | awk -F: '{print $6}')
+            usershell=$(echo $users | awk -F: '{print $NF}')
+
+            if [[ -z $(printf '%s\n' "${nologin[@]}" | grep -w $usershell) ]] &&\
+            [[ -z $(printf '%s\n' "${ignoresysuser[@]}" | grep -w $user) ]]; then
+                for dotfile in `find $userhome -maxdepth 1 -not -type d -not -type l -name ".[A-Za-z0-9]*"`; do
+                    stat -L -c "%U %a" $dotfile | egrep "$user 644"
+                done
+            fi
+        done
+      failed_when: >
+        users_own_their_dit_dirs.rc != 0
+      register: users_own_their_dit_dirs
+      tags:
+        - users_own_their_dit_dirs
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+ 
+# Ensure no users have .forward files
+- block:
+    - name: Ensure no users have .forward files
+      shell: |
+        IFS=$'\n'
+        nologin=('/sbin/nologin' '/usr/bin/nologin' '/bin/nologin' '/bin/false')
+        ignoresysuser=('halt' 'sync' 'shutdown')
+        for users in `cat /etc/passwd`; do
+            user=$(echo $users | awk -F: '{print $1}')
+            userhome=$(echo $users | awk -F: '{print $6}')
+            find $userhome -xdev -name .forward | wc -l | grep -w 0
+        done
+      failed_when: >
+        forward_files_audit.rc != 0
+      register: forward_files_audit
+      tags:
+        - forward_files_audit
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure no users have .netrc files
+# Ensure users' .netrc Files are not group or world accessible
+- block:
+    - name: Ensure no users have .netrc files
+      shell: |
+        IFS=$'\n'
+        nologin=('/sbin/nologin' '/usr/bin/nologin' '/bin/nologin' '/bin/false')
+        ignoresysuser=('halt' 'sync' 'shutdown')
+        for users in `cat /etc/passwd`; do
+            user=$(echo $users | awk -F: '{print $1}')
+            userhome=$(echo $users | awk -F: '{print $6}')
+            find $userhome -xdev -name .netrc | wc -l | grep -w 0
+        done
+      failed_when: >
+        netrc_files_audit.rc != 0
+      register: netrc_files_audit
+      tags:
+        - netrc_files_audit
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure no users have .rhosts files
+- block:
+    - name: Ensure no users have .rhosts files
+      shell: |
+        IFS=$'\n'
+        nologin=('/sbin/nologin' '/usr/bin/nologin' '/bin/nologin' '/bin/false')
+        ignoresysuser=('halt' 'sync' 'shutdown')
+        for users in `cat /etc/passwd`; do
+            user=$(echo $users | awk -F: '{print $1}')
+            userhome=$(echo $users | awk -F: '{print $6}')
+            find $userhome -xdev -name .rhosts | wc -l | grep -w 0
+        done
+      failed_when: >
+        no_users_have_rhosts_files.rc != 0
+      register: no_users_have_rhosts_files
+      tags:
+        - no_users_have_rhosts_files
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure all groups in /etc/passwd exist in /etc/group
+- block:
+    - name: Ensure all groups in /etc/passwd exist in /etc/group
+      shell: |
+            for gid in `awk -F: '{print $4}'  /etc/passwd`; do
+                grep -w $gid /etc/group || exit 1
+            done
+      failed_when: >
+         all_groups_in_etcpasswd_exist_in_etcgroup.rc != 0
+      register: all_groups_in_etcpasswd_exist_in_etcgroup
+      tags:
+        - all_groups_in_etcpasswd_exist_in_etcgroup
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure no duplicate UIDs exist
+- block:
+    - name: Ensure no duplicate UIDs exist
+      shell: |
+            cat /etc/passwd | cut -f3 -d":" | sort -n | uniq -c | while read x ; do
+              [ -z "${x}" ] && break 
+              set - $x 
+              if [ $1 -gt 1 ]; then 
+                users=`awk -F: '($3 == n) { print $1 }' n=$2 /etc/passwd | xargs` 
+                echo "Duplicate UID ($2): ${users}" 
+                exit 1
+              fi 
+            done
+      failed_when: >
+         no_duplicate_UIDs_exist.rc != 0
+      register: no_duplicate_UIDs_exist
+      tags:
+        - no_duplicate_UIDs_exist
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure no duplicate GIDs exist
+- block:
+    - name: Ensure no duplicate GIDs exist
+      shell: |
+            excludegid=(0, 1)
+            cat /etc/passwd | cut -f4 -d":" | sort -n | uniq -c | while read x ; do
+              [ -z "${x}" ] && break 
+              set - $x 
+              if [[ $1 -gt 1 ]] and [[ -z $(printf '%s\n' "${excludegid[@]}" | grep -w $1) ]]; then 
+                users=`awk -F: '($4 == n) { print $1 }' n=$2 /etc/passwd | xargs` 
+                echo "Duplicate GID ($2): ${users}" 
+                exit 1
+              fi 
+            done
+      failed_when: >
+         no_duplicate_UIDs_exist.rc != 0
+      register: no_duplicate_UIDs_exist
+      tags:
+        - no_duplicate_UIDs_exist
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+
+# Ensure no duplicate user names exist
+- block:
+    - name: Ensure no duplicate user names exist
+      shell: |
+            cat /etc/passwd | cut -f1 -d":" | sort -n | uniq -c | while read x ; do
+              [ -z "${x}" ] && break 
+              set - $x 
+              if [ $1 -gt 1 ]; then 
+                users=`awk -F: '($1 == n) { print $1 }' n=$2 /etc/passwd | xargs` 
+                echo "Duplicate ${users} exist" 
+                exit 1
+              fi
+            done
+      failed_when: >
+         no_duplicate_user_exist.rc != 0
+      register: no_duplicate_user_exist
+      tags:
+        - no_duplicate_user_exist
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+# Ensure no duplicate group names exist
+- block:
+    - name: Ensure no duplicate group names exist
+      shell: |
+            cat /etc/group | cut -f1 -d":" | sort -n | uniq -c | while read x ; do
+              [ -z "${x}" ] && break 
+              set - $x
+              if [[ $1 -gt 1 ]]; then 
+                group=`awk -F: '($1 == n) { print $1 }' n=$2 /etc/group | xargs` 
+                echo "Duplicate group exist $group"
+                exit 1
+              fi 
+            done
+      failed_when: >
+         no_duplicate_UIDs_exist.rc != 0
+      register: no_duplicate_UIDs_exist
+      tags:
+        - no_duplicate_UIDs_exist
+        - login
+
+    - set_fact:
+        _success: "{{ _success | int + 1 }}"
+  rescue:
+    - set_fact:
+        _failed: "{{ _failed | int + 1 }}"
+
+
+## END ##

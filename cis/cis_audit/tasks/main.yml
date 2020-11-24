@@ -1,0 +1,17 @@
+---
+
+# set success failed counter
+
+- name: Initiate Success Failed Counter
+  set_fact:
+     _success: 0
+     _failed: 0
+     
+- include_tasks: fs.yml
+
+- debug:
+    msg:
+      - "Success: {{ _success }}"
+      - "Failed: {{ _failed }}"
+
+## END 
