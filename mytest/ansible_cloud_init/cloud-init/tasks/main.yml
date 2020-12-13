@@ -1,0 +1,69 @@
+##
+#
+##
+
+- name: Remove cloud-init
+  yum:
+    name: cloud-init
+    state: absent
+
+- name: Install open-vm-tools open-vm-tools-desktop net-tools 
+  yum:
+    name: "{{ pkgs }}"
+    state: present
+  vars:
+    pkgs:
+      - open-vm-tools 
+      - open-vm-tools-desktop
+      - net-tools 
+
+##2# install cloud-init tarball
+- name: Create tmp directory /tmp/VGI/
+  file: 
+    path: /tmp/VGI/
+    state: directory
+
+- name: Copy cloud-init-19.4.tar.gz
+  copy:
+    src: cloud-init-19.4.tar.gz
+    dest: /tmp/VGI/cloud-init-19.4.tar.gz
+
+- name: Unpack cloud-init-19.4.tar.gz
+  unarchive:
+    src: /tmp/VGI/cloud-init-19.4.tar.gz
+    dest: /tmp/VGI/
+    remote_src: yes
+  
+- name: Install cloud-init tarball
+  shell: |
+         python setup.py install >/dev/null
+         sleep 5
+  args:
+    chdir: /tmp/VGI/cloud-init-19.4
+  ignore_errors: yes
+
+- name: Install cloud-init
+  yum:
+    name: cloud-init
+    state: present
+
+- name: Setup vmware-guestinfo
+  copy:
+    src: "{{ item.key.split('/')[-1] }}"
+    dest: "{{ item.key }}"
+    mode: "{{ item.value }}"
+  with_dict:
+    - /etc/cloud/cloud.cfg.d/99-DataSourceVMwareGuestInfo.cfg: 644
+    - /usr/lib/python2.7/site-packages/cloudinit/sources/DataSourceVMwareGuestInfo.py: 644
+    - /usr/bin/dscheck_VMwareGuestInfo: 755
+    - /usr/lib/python2.7/site-packages/cloudinit/sources/DataSourceOVF.py: 644
+    - /usr/lib/python2.7/site-packages/cloudinit/sources/helpers/vmware/imc/guestcust_util.py: 644
+    - /usr/lib/python2.7/site-packages/cloud_init-19.4-py2.7.egg/cloudinit/sources/helpers/vmware/imc/guestcust_util.py: 644
+  ignore_errors: yes
+
+- name: Cleanup /var/lib/cloud/
+  file:
+    path: /var/lib/cloud/*
+    state: absent
+
+## END 

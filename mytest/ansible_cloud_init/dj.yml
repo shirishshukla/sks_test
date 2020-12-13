@@ -1,0 +1,4 @@
+---
+- hosts: dj
+  roles:
+    - cloud-init
