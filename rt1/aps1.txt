@@ -1,7 +1,1 @@
-## 
-wget https://raw.githubusercontent.com/canonical/cloud-init/master/cloudinit/sources/DataSourceOVF.py
-wget https://raw.githubusercontent.com/canonical/cloud-init/master/cloudinit/sources/helpers/vmware/imc/guestcust_util.py
-cd
-cp -nf DataSourceOVF.py /usr/lib/python2.7/site-packages/cloudinit/sources/DataSourceOVF.py
-cp -nf guestcust_util.py /usr/lib/python2.7/site-packages/cloud_init-19.4-py2.7.egg/cloudinit/sources/helpers/vmware/imc/guestcust_util.py
-cp -nf guestcust_util.py /usr/lib/python2.7/site-packages/cloudinit/sources/helpers/vmware/imc/guestcust_util.py
+
