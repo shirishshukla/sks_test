@@ -1,0 +1,92 @@
+########## default/main.yml
+#### Ubuntu 
+
+## Tarball 
+version='0.102.1'
+wget https://www.clamav.net/downloads/production/clamav-${version}.tar.gz
+
+tar -xvzf ~/clamav-${version}.tar.gz
+cd ~/clamav-${version}
+./configure
+make
+checkinstall
+dpkg -i ~/clamav-0.99.1/clamav_0.99.1-1_amd64.deb
+dpkg-reconfigure clamav-freshclam
+rm -f /usr/local/etc/freshclam.conf
+ln -s /etc/clamav/freshclam.conf /usr/local/etc/freshclam.conf
+
+clamscan -r /
+
+---
+
+# clamav version
+clamav_version: 0.102.1
+clamav_src_code_url: https://www.clamav.net/downloads/production/clamav-{{ clamav_version }}.tar.gz
+clamav_extract_temp_dir: /tmp/clamav_temp
+# clamav daemond
+clamav_daemon_state: started
+clamav_daemon_enabled: true
+
+# clamav-freshclam daemon 
+clamav_freshclam_daemon_state: started
+clamav_freshclam_daemon_enabled: true
+
+########## task/main.yml
+---
+
+# Extract Binary 
+- name: Unarchive clamav-{{ clamav_version }}.tar.gz 
+  unarchive:
+    src: {{ clamav_src_code_url }}
+    dest: {{ clamav_extract_temp_dir }}
+    remote_src: yes
+  
+# Install 
+- name: configure and make
+  command: ./configure; make
+  args:
+    chdir: "{{ clamav_extract_temp_dir }}/clamav-{{ clamav_version }}"
+  register: config_make_return
+
+# Validate prerequisites
+- name: checkinstall
+  command: checkinstall
+  args:
+    chdir: "{{ clamav_extract_temp_dir }}/clamav-{{ clamav_version }}"
+  register: checkinstall_return
+  
+# Install dpkg 
+- name: Install dpkg 
+  command: dpkg -i {{ deb_path }}
+  vars:
+    deb_path: "{{ clamav_extract_temp_dir }}/clamav-{{ clamav_version }}/clamav_{{ clamav_version }}_amd64.deb"
+  args:
+    chdir: "{{ clamav_extract_temp_dir }}/clamav-{{ clamav_version }}"
+  register: checkinstall_return
+  
+# dpkg-reconfigure clamav-freshclam
+- name: dpkg-reconfigure 
+  command: dpkg-reconfigure clamav-freshclam
+  register: dpkg_reconfigure_return
+  
+# Remove freshclam default file 
+- name: Delete default freshclam.conf
+  file:
+    path: {{ freshclam_conf_usr }}
+    state: absent
+  run_once: true
+  register: del_freshclam_conf
+  vars:
+    freshclam_conf_usr: /usr/local/etc/freshclam.conf
+    
+# 
+- name: Create symlink 
+  file:
+    src: {{ freshclam_conf_etc }}
+    dest: {{ freshclam_conf_usr }}
+    state: link
+    vars:
+      freshclam_conf_usr: /usr/local/etc/freshclam.conf
+      freshclam_conf_etc: /etc/clamav/freshclam.conf 
+    
+## END ## 

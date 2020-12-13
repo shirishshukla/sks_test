@@ -2,7 +2,8 @@
       String $account_name,
       String $account_access_key,
       Integer $controller_port,
-      Boolean $controller_ssl_enabled
+      Boolean $controller_ssl_enabled,
+	  Boolean $iisappenabled
 | -%>
 <winston>
   <appdynamics-agent xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
@@ -10,7 +11,7 @@
       <account name="<%= $account_name %>" password="<%= $account_access_key %>"/>
     </controller>
     <machine-agent />
-    <app-agents>
+    <app-agents enabled="<%= $iisappenabled %>">
       <IIS>
         <automatic  />
       </IIS>
