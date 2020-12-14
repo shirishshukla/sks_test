@@ -1,1 +1,12 @@
 
+jinja2
+oauthlib
+configobj>=5.0.2
+pyyaml
+requests
+jsonpatch
+jsonschema
+six
+configparser
+attr
+deepmerge
