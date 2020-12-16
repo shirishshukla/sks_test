@@ -1,12 +1,79 @@
+https://raw.githubusercontent.com/IMIO/cloud-init-vmware-guestinfo/dc9d4e5d69ceb8ced1b9502c51e84588b1e465d3/DataSourceVMwareGuestInfo.py
 
-jinja2
-oauthlib
-configobj>=5.0.2
-pyyaml
-requests
-jsonpatch
-jsonschema
-six
-configparser
-attr
-deepmerge
+##
+#
+##
+
+- name: Install open-vm-tools open-vm-tools-desktop net-tools
+  yum:
+    name: "{{ pkgs }}"
+    state: present
+  vars:
+    pkgs:
+      - open-vm-tools
+      - open-vm-tools-desktop
+      - net-tools
+      - http://mirror.centos.org/centos/7/os/x86_64/Packages/cloud-init-19.4-7.el7.centos.x86_64.rpm
+#      - cloud-init
+
+# copy cloud-init required python libraries
+- name: Create tmp directory /tmp/VGI/
+  file:
+    path: /tmp/VGI/
+    state: directory
+
+- name: Unpack cloud-init-19.4.tar.gz
+  unarchive:
+    src: cloud-init-libs.gz
+    dest: /tmp/VGI/
+    remote_src: no
+
+- name: Ensure vmtoolsd.service started atfer dbus.service
+  lineinfile:
+    path: /lib/systemd/system/vmtoolsd.service
+    insertafter: '^Documentation=*'
+    regexp: '^Required=dbus.service'
+    line: 'Required=dbus.service'
+
+- name: Setup vmware-guestinfo
+  copy:
+    src: "{{ item.key.split('/')[-1] }}"
+    dest: "{{ item.key }}"
+    mode: "{{ item.value }}"
+  with_dict:
+    - /etc/cloud/cloud.cfg.d/99-DataSourceVMwareGuestInfo.cfg: 644
+    - /usr/lib/python2.7/site-packages/cloudinit/sources/DataSourceVMwareGuestInfo.py: 644
+    - /usr/bin/dscheck_VMwareGuestInfo: 755
+#    - /usr/lib/python2.7/site-packages/cloudinit/sources/DataSourceOVF.py: 644
+#    - /usr/lib/python2.7/site-packages/cloudinit/sources/helpers/vmware/imc/guestcust_util.py: 644
+  ignore_errors: yes
+
+- name: Enable Services
+  service:
+    name: "{{ item }}"
+    enabled: yes
+  with_items:
+    - cloud-init-local.service
+    - cloud-init.service
+    - cloud-config.service
+    - cloud-final.service
+    - cloud-init.target
+    - vgauthd.service
+    - vmtoolsd.service
+  ignore_errors: yes
+
+- name: Cleanup /var/lib/cloud/
+  file:
+    path: /var/lib/cloud/*
+    state: absent
+
+- name: cloud-init clean
+  shell: |
+     cloud-init clean
+     cloud-init clean --logs
+     #/usr/lib/cloud-init/ds-identify --force
+     #cloud-init init --local
+     #cloud-init init
+  ignore_errors: yes
+
+## END
