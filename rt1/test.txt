@@ -1,0 +1,613 @@
+#!/usr/bin/groovy
+
+environment{
+    ENVIRONMENT_NAME="SIT-2"
+    PROPERTIESFILE_COMMIT_AUTHOR=null
+    PROPERTIESFILE_COMMIT_MESSAGE=null
+    int SERVICESCOUNT=0
+}
+
+def getDIYDeployPropertiesFile(){
+    diySITPropsFile=ENVIRONMENT_NAME +"_SERVICES.properties"
+
+    dir(env.WORKSPACE){
+        sh "rm -rf $ENVIRONMENT_NAME"
+        sh "mkdir -m +x $ENVIRONMENT_NAME"
+    }
+
+    dir(env.WORKSPACE + "/" + ENVIRONMENT_NAME){
+        git branch: ENVIRONMENT_NAME+"_SERVICES",
+            credentialsId: '3e38e78b-df56-4861-95f1-f084e03f93f5',
+            url: 'https://gitw.cvshealth.com/SPP/diy-buildndeployments.git'
+
+        PROPERTIESFILE_COMMIT_AUTHOR=sh ( script: 'git log -n 1 --pretty=format:"%an" -- "${ENVIRONMENT_NAME}_SERVICES.properties" | awk \'{ $NF="";print}\'',
+            returnStdout: true).trim()
+
+        PROPERTIESFILE_COMMIT_MESSAGE=sh ( script: 'git log -n 1 -- "${ENVIRONMENT_NAME}_SERVICES.properties" | tail -1',
+            returnStdout: true).trim()
+        sh "cp ${ENVIRONMENT_NAME}_SERVICES.properties ${env.WORKSPACE}"
+    }
+    diySITPropsFile
+}
+
+def getServicesGitFile(){
+    SERVICES_GIT="SERVICES-GIT"
+    SERVICES_GIT_FILE=env.WORKSPACE + "/" + SERVICES_GIT +"/services-git.properties"
+
+    dir(env.WORKSPACE){
+        sh "mkdir $SERVICES_GIT"
+    }
+
+    dir(env.WORKSPACE + "/" + SERVICES_GIT){
+        git branch: "SERVICES_PORTS,GIT",
+            credentialsId: '3e38e78b-df56-4861-95f1-f084e03f93f5',
+            url: 'https://gitw.cvshealth.com/SPP/common-resources.git'
+    }
+    println("SERVICES_GIT_FILE is: " + SERVICES_GIT_FILE)
+    SERVICES_GIT_FILE
+}
+
+def deployFromProps(def bndPropsFile){
+    def JOBS_LOCATION="SPRx2.0/BUILD_DEPLOY/SIT/SIT-2/SERVICES"
+    def DEPLOYMENT_CONFIG_FILE=bndPropsFile
+    def BUILD_GOAL="DEPLOY"
+    Properties diyProperties= null
+
+    def applBnDJobsArray=[:]
+    def index=0
+
+    dir(env.WORKSPACE){
+        diyProperties = readProperties file: 'SIT-2_SERVICES.properties'
+    }
+
+    Set services = diyProperties.keySet()
+    SERVICESCOUNT=services.size()
+
+    Iterator servicesIterator = services.iterator();
+
+    while(servicesIterator.hasNext()){
+        def artifactID = servicesIterator.next()
+        def branchName = diyProperties.get(artifactID)
+
+        def BnD_JOB=JOBS_LOCATION + "/" + artifactID
+
+        println("ARTIFACT_ID : " + artifactID + ", BRANCH : " + branchName + ", BUILD_GOAL : " + BUILD_GOAL)
+
+        applBnDJobsArray["${index}"]={
+            node('SPRx2.0_BUILD-DEPLOY'){
+                build job: BnD_JOB, parameters: [
+                    string(name: 'BRANCH_NAME',value: branchName),
+                    string(name: 'BUILD_GOAL',value: BUILD_GOAL)
+                ]
+            }
+        }
+        index++
+        }
+   parallel applBnDJobsArray
+}
+
+def getVersions(){
+    def SIMPLE_DISPLAY_JOB="SPRx2.0/DEVOPS_AUTOMATION_UTILITIES/DIY_Deployments/DIY_BnD_DEPENDENCY_UTILITIES/SIMPLE_VERSION_${ENVIRONMENT_NAME}"
+
+    node('SPRx2.0_DEPLOY-ONLY'){
+        def built=build(SIMPLE_DISPLAY_JOB)
+    }
+}
+
+int getLinesCount(def fileLocation){
+    command="wc -l $fileLocation | awk '{print \$1}'"
+    def out=sh script: command, returnStdout: true
+    int count=out as int
+
+    println("COUNT is #" + count)
+    count
+}
+
+def prepareCSV4PropertiesFile4mMasterCSVFile(def deploymentConfFile, def masterCSVFile){
+    csvFile4PropertiesFile="${ENVIRONMENT_NAME}_BnD.csv"
+    sh "rm -rf $csvFile4PropertiesFile"
+
+    if(SERVICESCOUNT!=0){
+        sh "echo Service, Branch, Swagger Status, New Version, Previous Version, Versions Different?>$csvFile4PropertiesFile"
+    }
+
+    dir(env.WORKSPACE + "/" + ENVIRONMENT_NAME){
+        git branch: "swagger-check",
+            credentialsId: '3e38e78b-df56-4861-95f1-f084e03f93f5',
+            url: 'https://gitw.cvshealth.com/SPP/swagger-health-check.git'
+        sh "cp SWAGGER_INTERNAL_PROXY.properties ../swaggerInternalPxyProperties"
+    }
+
+    Properties swaggerInternalPxyProperties = readProperties file: "swaggerInternalPxyProperties"
+    swaggerBaseURL = swaggerInternalPxyProperties.get(ENVIRONMENT_NAME+"_APPL")
+
+    dir(env.WORKSPACE){
+        diyProperties = readProperties file: deploymentConfFile
+    }
+
+    Set services = diyProperties.keySet();
+    Iterator servicesIterator = services.iterator();
+
+    while(servicesIterator.hasNext()){
+        def artifactID = servicesIterator.next()
+        def branchName = diyProperties.get(artifactID)
+        def swaggerServiceCheckURL = "${swaggerBaseURL}/${artifactID}/swagger-ui.html#"
+        println(artifactID)
+        sh '''
+            URLCheck='''+swaggerServiceCheckURL+'''
+            EnvName='''+ENVIRONMENT_NAME+'''
+            ArtifactID='''+artifactID+'''
+            MasterCSVFile='''+masterCSVFile+'''
+            BranchName='''+branchName+'''
+            CsvFile4PropertiesFile='''+csvFile4PropertiesFile+'''
+            StatusCode=$(curl -s -o /dev/null -w "%{http_code}" ${URLCheck})
+            if [[ $StatusCode -eq 200 ]]; then
+                ServiceStatus="GOOD"
+            else
+                ServiceStatus="BAD"
+            fi
+            ServiceLink="<a href=\"${URLCheck}\" target=\"_blank\">${ServiceStatus}</a>"
+            ServiceStatus=$ServiceLink
+
+            echo "$URLCheck : StatusCode : ServiceStatus"
+
+            grep ${ArtifactID}, ${MasterCSVFile} | sed "s+${ArtifactID},+${ArtifactID},${BranchName},${ServiceStatus},+g" >> $csvFile4PropertiesFile
+        '''
+    }
+}
+
+pipeline{
+        environment{
+            ENVIRONMENT_NAME="SIT-2"
+            Properties properties=null
+            def runtimeString=""
+            def deplPropsFolder="${env.ENVIRONMENT_NAME}"
+            def sitDIYPropsFile=""
+            def DIY_DELTA_REPORT="${env.ENVIRONMENT_NAME}_DIY-REPORT.csv"
+            def DIY_DELTA_REPORT_HTML="${env.ENVIRONMENT_NAME}_DIY-REPORT.html"
+            def csvFile4PropertiesFile="${env.ENVIRONMENT_NAME}_BnD.csv"
+            def USER_INPUT_VALIDATION_ERROR_FILE="${env.ENVIRONMENT_NAME}_USER_INPUT_VALIDATION_ERROR.csv"
+            def USER_INPUT_VALIDATION_ERROR_HTML_REPORT="${env.ENVIRONMENT_NAME}_USER_INPUT_VALIDATION_ERROR.html"
+            def VALIDATION_PASSED=""
+
+            def SUBJECT=null
+            def CONTENT=null
+        }
+
+        agent{
+            label "SPRx2.0_DEPLOY-ONLY"
+        }
+
+        stages{
+
+            stage("Clean WS"){
+                steps{
+                    step([$class: 'WsCleanup'])
+                }
+            }
+
+            stage("Checkout and Preperation"){
+                steps{
+                    checkout scm
+
+                    script{
+                        sitDIYPropsFile=getDIYDeployPropertiesFile()
+
+                        println("sitDIYPropsFile is: " + sitDIYPropsFile)
+
+                        println("---------------------------------------------------\nList of Services and Branches to be Built and Deployed in ${ENVIRONMENT_NAME}: \n")
+                        sh "cat -n $sitDIYPropsFile"
+
+                        /* COMPOSING SUBJECT */
+                        time=sh ( script: 'date +"%I %p"',
+                                  returnStdout: true).trim()
+
+                        SUBJECT="${ENVIRONMENT_NAME}" + " Deployments @${time} ET"
+                    }
+                }
+            }
+
+            stage("Validate Deployment Properties"){
+                steps{
+                    script{
+                        def validationErrorsText=""
+                        int numberOfLines=0
+                        def validationsErrorFileSize=0// First line will be the header. So if the count is more than 1, then the issue is happened.
+                        def DIYSCRIPT=load "DIY_BnD_Library.groovy"
+
+                        println("sitDIYPropsFile is:"+ sitDIYPropsFile)
+                        def gitRepoPropsFileLoc=getServicesGitFile()
+                        println("gitRepoPropsFileLoc: "+gitRepoPropsFileLoc)
+                        validationErrorsText=DIYSCRIPT.validateDeploymentPropertiesFile(sitDIYPropsFile, gitRepoPropsFileLoc)
+
+                        println("USER INPUT VALIDATION ERRORS: " + validationErrorsText)
+
+                        writeFile(file: USER_INPUT_VALIDATION_ERROR_FILE, text: validationErrorsText)
+
+                        dir(env.WORKSPACE){
+                            numberOfLines=getLinesCount(USER_INPUT_VALIDATION_ERROR_FILE)
+                        }
+                        println("Number of Lines in the file is: " + numberOfLines)
+
+                        if(numberOfLines == 1){ //First line is the Header
+                            println("USER INPUT VALIDATION PASSED SUCCESSFULLY !!")
+                            VALIDATION_PASSED=true
+                        }
+                        else{
+                            VALIDATION_PASSED=false
+                            println("ERRORS FOUND IN USER INPUT PROPERTIES FILE")
+                            dir(env.WORKSPACE){
+                                sh "sh GENERATE_HTML-TABLE_FROM_CSV.sh ${USER_INPUT_VALIDATION_ERROR_FILE} > ${USER_INPUT_VALIDATION_ERROR_HTML_REPORT}"
+                            }
+                        }
+                        cntdiyProperties = readProperties file: sitDIYPropsFile
+                        Set serviceskeys = cntdiyProperties.keySet()
+                        SERVICESCOUNT = serviceskeys.size()
+                        println("Service Count: " + SERVICESCOUNT)
+                        if(SERVICESCOUNT==0){
+                               PROPERTIESFILE_COMMIT_MESSAGE="""
+                                    <center>
+                                        <h1 style="background-color:#FFC300 ;">!! No deployments planned in this window !!</h1>
+                                    </center>
+                                    """
+                        }
+                    }
+                }
+            }
+
+            stage("Capture Versions: Pre-Deployment"){
+
+                when{
+                    expression{ VALIDATION_PASSED == true && SERVICESCOUNT > 0 }
+                }
+
+                steps{
+                    script{
+                        getVersions()
+                    }
+                }
+            }
+
+            stage("concurrent- Build & Deployments"){
+                when{
+                    expression{ VALIDATION_PASSED == true && SERVICESCOUNT > 0 }
+                }
+                steps{
+                    dir("${env.workspace}") {
+                        deployFromProps(sitDIYPropsFile)
+                    }
+                }
+            }
+
+            stage("File Empty & Check-In"){
+                when{
+                    expression{ VALIDATION_PASSED == true && SERVICESCOUNT > 0 }
+                }
+
+                steps{
+                    script{
+                        sh "echo '#Emptied for next deployments' > '${env.WORKSPACE}/${ENVIRONMENT_NAME}/${ENVIRONMENT_NAME}_SERVICES.properties'"
+                        sh "cat 'DIY_USAGE.txt' > '${env.WORKSPACE}/${ENVIRONMENT_NAME}/${ENVIRONMENT_NAME}_SERVICES.properties'"
+
+                        println("SERVICES COUNT: " + SERVICESCOUNT)
+
+                        if(SERVICESCOUNT == 0){
+                            println("PROPERTIES COUNT IS ZERO. NO CHANGES TO COMMIT AND PUSH")
+                        }
+
+                        else{
+                            dir("${env.WORKSPACE}/${ENVIRONMENT_NAME}"){
+                                sh "git add '${ENVIRONMENT_NAME}_SERVICES.properties'"
+                                sh "git commit -m '${ENVIRONMENT_NAME} DIY: File empty for next DIY Build & Deployments. Auto-CheckIn by Jenkins Build#: ${BUILD_NUMBER}'"
+                                sh "git push origin HEAD"
+                            }
+                        }
+                    }
+                }
+            }
+
+            stage("Capture Versions: Post-Deployment"){
+                when{
+                    expression{ VALIDATION_PASSED == true && SERVICESCOUNT > 0 }
+                }
+
+                steps{
+                    script{
+                        getVersions()
+                    }
+                }
+            }
+
+            stage("Generate Delta"){
+                when{
+                    expression{ VALIDATION_PASSED == true && SERVICESCOUNT > 0 }
+            }
+                steps{
+                    node('SPRx2.0_DEPLOY-ONLY'){
+                        build job: "SPRx2.0/DEVOPS_AUTOMATION_UTILITIES/DIY_Deployments/DIY_BnD_DEPENDENCY_UTILITIES/DIY_DELTA_SIT-2"
+                    }
+                }
+            }
+
+            stage("Generate Report"){
+                when{
+                    expression{ VALIDATION_PASSED == true }
+                }
+
+                steps{
+                    dir(env.WORKSPACE) {
+                        script{
+                            copyArtifacts(projectName: "SPRx2.0/DEVOPS_AUTOMATION_UTILITIES/DIY_Deployments/DIY_BnD_DEPENDENCY_UTILITIES/DIY_DELTA_SIT-2")
+
+                            prepareCSV4PropertiesFile4mMasterCSVFile("$sitDIYPropsFile", "$DIY_DELTA_REPORT")
+
+                            sh "/bin/sh GENERATE_HTML-TABLE_FROM_CSV.sh '$csvFile4PropertiesFile' > '$DIY_DELTA_REPORT_HTML'"
+                        }
+                    }
+                }
+            }
+
+            stage("Notification"){
+                steps{
+                    script{
+                        if(VALIDATION_PASSED==true)
+                        {
+                            println("Notification Stage, Value of VALIDATION_PASSED is " + VALIDATION_PASSED)
+
+                            table_content=sh (
+                                script: 'cat ${ENVIRONMENT_NAME}_DIY-REPORT.html',
+                                returnStdout: true
+                                ).trim()
+
+                            CONTENT="""
+                                    <html>
+                                      <style>
+                                        pre, ul, li, body {
+                                                    font-family: 'Calibri';
+                                                    font-size: 12px;
+                                               }
+                                          .par {
+                                                    font-family: 'Calibri';
+                                                    font-size: 12px;
+                                               }
+                                        .title {
+                                                    font-family: 'Rockwell Extra Bold';
+                                                    font-size: 20px;
+                                                    color:black;
+                                                    background-color:blue ;
+                                                    text-align: center;
+                                                }
+                                        .foot {
+                                                    font-family: 'Calibri';
+                                                    font-size: 15px;
+                                                    color:black;
+                                                    background-color: #ffad99;
+                                                    text-align: center;
+                                               }
+                                        .foot1 {
+                                                    font-family: 'Calibri';
+                                                    font-size: 18px;
+                                                    color:black;
+                                                    background-color: lightblue;
+                                                    text-align: center;
+                                               }
+
+                                    <!--  Table 1: Style  Start here -->
+                                        table {
+                                                     width: 100%;
+                                                     text-align: center;
+                                                     border-collapse: collapse;
+                                               }
+							                             th {
+                                                     padding: 10px 5px;
+                                                     font-family: 'Calibri';
+                                                     border: 1px solid #fff23df;
+                                               }
+                                           td {
+                                                     padding: 5px 10px;
+                                                     border-collapse: collapse;
+                                                     text-align: center;
+                                                     font-family: 'Calibri';
+                                                     font-size: 16px;
+                                               }
+                                     tbody, td {
+                                                     background: #D0E4F5;
+                                               }
+                                     thead, th {
+                                                     font-size: 18px;
+                                                     font-weight: bold;
+                                                     color: #AED6F1;
+                                                     background: #1C6EA4;
+                                                     background: -moz-linear-gradient(top, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                                     background: -webkit-linear-gradient(top, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                                     background: linear-gradient(to bottom, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                               }
+
+                                        </style>
+                                        <body>
+                                        <h2 style="text-align:center"><font style="background-color:lightblue;color:black">${ENVIRONMENT_NAME} AUTOMATIC BUILD & DEPLOYMENTS COMMUNICATION</font></h2>
+                                        <center>
+                                    """ +
+                                    table_content +
+                                    """
+                                          <br></br>
+                                          </center>
+                                            <ul style="color:#3B240B">
+                                    """
+
+                                    if(SERVICESCOUNT != 0){
+                                        println("PROPERTIES COUNT IS NOT ZERO. Display Author int the report")
+
+                                        CONTENT=CONTENT+
+                                        """
+                                        Build Initiated By:&nbsp;${PROPERTIESFILE_COMMIT_AUTHOR}
+                                        <br>
+                                        """
+                                    }
+
+                                    CONTENT=CONTENT +
+                                    """
+                                            ${PROPERTIESFILE_COMMIT_MESSAGE}
+                                            </ul>
+                                            <br></br>
+                                             <p class='foot1'>[ This is an auto generated email, please do not reply. If you have any queries, please email to
+                                             <a href='mailto:specialty_platform_engg@CVSHealth.com?subject=${ENVIRONMENT_NAME} DIY BUILD-DEPLOYMENTS'>Platform Engg</a>  ] </p>
+                                        </body>
+                                      </html>
+                                  """
+                        }
+                    }
+                }
+            }
+        }
+
+        post{
+
+            failure {
+                script{
+                    println("POST: " +VALIDATION_PASSED)
+                    println("!!!!!!!!!!!!!!!!!!!!!  FAILED  FAILED  FAILED  FAILED  FAILED  FAILED !!!!!!!!!!!!!!!!!!!!!")
+
+                    SUBJECT=SUBJECT + ": --- FAILED ---"
+
+                    emailext mimeType: 'text/html',
+                    body: 'SIT-2 AUTO DEPLOYMENTS FAILED!!',
+                    subject: SUBJECT,
+                    to: "Harika.Paimagam@cvshealth.com"
+                    //to: "vishwanath.manchala@cvshealth.com,sivaramakrishna.bolla@CVSHealth.com,Chandru.Perumal@CVSHealth.com,UdayaBhaskar.Aravapalli@CVSHealth.com"
+                    //to: "vishwanath.manchala@cvshealth.com"
+                }
+            }
+
+            success {
+                script{
+                    //println("POST: " +VALIDATION_PASSED)
+                    def emailSuccessList="Harika.Paimagam@cvshealth.com,vishwanath.manchala@cvshealth.com"
+                     //def emailSuccessList="Harika.Paimagam@cvshealth.com"
+                    //def emailSuccessList="pgh_is_sprx_developers@CVSHealth.com,pgh_is_sprx_uiux@CVSHealth.com,spp_phase1_buildowners@CVSHealth.com,spp_phase2_buildowners@CVSHealth.com,spp_phase3_buildowners@CVSHealth.com,specialty_uat_team@CVSHealth.com,SHMHBS-SPARCS@CVSHealth.com,SHMQASupport@CVSHealth.com,specialty_platform_engg@CVSHealth.com"
+                     // def emailSuccessList="vishwanath.manchala@cvshealth.com"
+                    //def emailSuccessList="UdayaBhaskar.Aravapalli@CVSHealth.com,vishwanath.manchala@cvshealth.com"
+
+                    if (VALIDATION_PASSED == true){
+                        emailext mimeType: 'text/html',
+                        body: CONTENT,
+                        subject: SUBJECT,
+                        to:"Harika.Paimagam@cvshealth.com,vishwanath.manchala@cvshealth.com"
+                        //to:"Harika.Paimagam@cvshealth.com"
+                        //to: emailSuccessList
+                    }
+                    else{
+                        println("!!!!!!!!!!!!!!!!!!!!!  INVALID PROPERTIES FILE  !!!!!!!!!!!!!!!!!!!!! ")
+                        SUBJECT=SUBJECT + ": --- VALIDATION ERROR ---"
+
+                        validationErrorsTableContent=sh (
+                            script: 'cat ${USER_INPUT_VALIDATION_ERROR_HTML_REPORT}',
+                            returnStdout: true
+                            ).trim()
+
+                        VALIDATION_ERRORS_CONTENT="""
+                            <html>
+                                    <style>
+                                    .tg  {border-collapse:collapse;border-spacing:0;}
+                                    .tg td{font-family:'Calibri';font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:black;}
+                                    .tg th{font-family:'Calibri';font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:black;text-align: center;}
+                                    .tg .tg-0pky{border-color:inherit;text-align:left;vertical-align:top}
+                                        pre, ul, li, body {
+                                                font-family: 'Calibri';
+                                                font-size: 15px;
+                                            }
+                                        table {
+                                                font-family: 'Calibri';
+                                                font-size: 14px;
+                                                text-align: center;
+                                            }
+                                        .par {
+                                                font-family: 'Calibri';
+                                                font-size: 15px;
+                                            }
+                                        .title {
+                                                    font-family: 'Rockwell Extra Bold';
+                                                    font-size: 24px;
+                                                    color:black;
+                                                    background-color:blue;
+                                                    text-align: center;
+                                                }
+                                        .foot {
+                                                    font-family: 'Calibri';
+                                                    font-size: 15px;
+                                                    color:black;
+                                                    background-color: #ffad99;
+                                                    text-align: center;
+                                               }
+                                               <!--  Table 1: Style  Start here -->
+                                                   table {
+                                                                width: 100%;
+                                                                text-align: center;
+                                                                border-collapse: collapse;
+                                                          }
+           							                             th {
+                                                                padding: 10px 5px;
+                                                                font-family: 'Calibri';
+                                                                border: 1px solid #fff23df;
+                                                          }
+                                                      td {
+                                                                padding: 5px 10px;
+                                                                border-collapse: collapse;
+                                                                text-align: center;
+                                                                font-family: 'Calibri';
+                                                                font-size: 16px;
+                                                          }
+                                                tbody, td {
+                                                                background: #D0E4F5;
+                                                          }
+                                                thead, th {
+                                                                font-size: 18px;
+                                                                font-weight: bold;
+                                                                color: #AED6F1;
+                                                                background: #1C6EA4;
+                                                                background: -moz-linear-gradient(top, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                                                background: -webkit-linear-gradient(top, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                                                background: linear-gradient(to bottom, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                                          }
+                                        </style>
+                                        <body>
+                                        <h3 style="text-align:center"><font style="background-color:lightblue;color:black">${ENVIRONMENT_NAME} AUTOMATIC BUILD & DEPLOYMENTS COMMUNICATION</font></h3>
+                                        Hello&nbsp;${PROPERTIESFILE_COMMIT_AUTHOR},<br>
+                                        Below issues found in the committed deployment properties file.<br></br>Please update as per the usage instructions and check-in again.
+                                        <br></br>
+                                        <center>
+                            """ +
+                            validationErrorsTableContent +
+                            """
+                            <br></br>
+                            </center>
+                            <ul>
+                            Build Initiated By:&nbsp;${PROPERTIESFILE_COMMIT_AUTHOR}
+                            <br>
+                            """
+
+                            VALIDATION_ERRORS_CONTENT=VALIDATION_ERRORS_CONTENT +
+
+                            """
+                                ${PROPERTIESFILE_COMMIT_MESSAGE}
+                                </ul>
+                                <br></br>
+                                     <p class='foot'>[ This is an auto generated email, please do not reply. If you have any queries, please email to
+                                     <a href='mailto:Harika.Paimagam@cvshealth.com,vishwanath.manchala@cvshealth.com?subject=${ENVIRONMENT_NAME} DIY BUILD-DEPLOYMENTS'>Platform Engg</a>  ] </p>
+                                </body>
+                            </html>
+                            """
+
+                        emailext mimeType: 'text/html',
+                        body: VALIDATION_ERRORS_CONTENT,
+                        subject: SUBJECT,
+                        to:"Harika.Paimagam@cvshealth.com,vishwanath.manchala@cvshealth.com"
+                        //to:"Harika.Paimagam@cvshealth.com"
+                        //to: emailSuccessList
+                    }
+                }
+            }
+        }
+}
+
+// end 
