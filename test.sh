@@ -1,4 +1,5 @@
 ## Script to add datasource in iws-standalone-full-ha_prime_source.xml
+##SKS-master
 
 # Variables
 ToFILE=$1
