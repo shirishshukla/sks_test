@@ -1,0 +1,423 @@
+#!/usr/bin/groovy
+
+def agentName = "SPRx2.0_DEPLOY-ONLY"
+def DeplPropFile = "INPUT_SERVICES.properties"
+def SerialServicesListFile = "SERIAL_SERVICES_LIST.txt"
+def SerialServicesPropFile = "SERIAL_SERVICES.properties"
+def ParallelServicesPropFile = "PARALLEL_SERVICES.properties"
+def NAServicesPropFile = "NA_SERVICES.properties"
+
+// Demployment
+def deployFromProps(def SERVICES, deployType, agent){
+    def index = 0
+    def time_wait = env.SLEEP_TIME_BETWEEN_SERVICES // wait for seconds between builds
+    boolean PROCEED = true
+    def applDeployJobsArray=[:]
+    def Map modules = [:]
+    def SERVICESCOUNT = SERVICES.size()
+
+    println("Deploy Type: "+ deployType + "\nServices: \n" + SERVICES.join(',').replace(',', '\n') + '\nTotal: '+ SERVICESCOUNT )
+
+    if (SERVICESCOUNT > 0) {
+        // loop over services
+        SERVICES.each { SERVICE ->
+
+            modules.runjob = load "runJob.groovy"
+
+            // Serial
+            if (deployType == 'serial') {
+                PROCEED = modules.runjob.runBuild(SERVICE, PROCEED, deployType, agent)
+            } // end serial if condition
+
+            // Parallel
+            if(deployType == 'parallel') {
+                applDeployJobsArray["${index}"]= {
+                    PROCEED = modules.runjob.runBuild(SERVICE, PROCEED, deployType, agent)
+                }
+            }
+            index++
+        } // End Loop
+
+        //run if parallel
+        if(deployType == 'parallel') {
+            parallel applDeployJobsArray
+        }
+
+    }
+    return PROCEED
+}
+
+// Get number of lines in file
+int getLineCountInfile(def filename) {
+    File file = new File("${env.WORKSPACE}/${filename}")
+    if(file.exists()) {
+        def filenameR = readFile file: filename
+        def filenameL = filenameR.readLines()
+        count = filenameL.size()
+    } else {
+        count = 0
+    }
+    return count
+}
+
+// Pipeline
+pipeline{
+
+    agent{
+        label agentName
+    }
+
+    environment{
+        JOB_PATH = "SPRx2.0/POC/OnShore/HARIKA/Serial_Deployment_Test/child_jobs/"
+        REPORT_CSV_FILE = "${env.WORKSPACE}/report.csv"   // Report csv file
+        HTML_REPORT_FILE = "${env.WORKSPACE}/report.html"  // Report html format
+        FAILED_REPORT_FILE = "${env.WORKSPACE}/FAILED_REPORT.properties"  // Report html format
+        EMAIL_REPORT_HEADER = "SERIAL DEPLOYMENTS COMMUNICATION" // Header in email body
+        NOTIFY_SUBJECT = "Serial Deployments"   // Email Notification Subject
+        //NOTIFY_TO = "Harika.Paimagam@cvshealth.com,Vishwanath.Manchala@CVSHealth.com"
+        NOTIFY_TO = "Harika.Paimagam@cvshealth.com"
+        SERVICESCOUNT = 0
+        ReportSize = 0
+        boolean NOTIFYED = false
+        boolean DEPLOY_RESULT_STATUS = true
+        boolean EMAIL_NOTIFICATION = true
+    }
+
+    stages{
+
+        // Clean  WORKSPACE
+        stage("Clean WS") {
+            steps{
+                step([$class: 'WsCleanup'])
+            }
+        }
+
+        // Checkout GIT REPO
+        stage("Checkout") {
+            steps{
+                checkout scm
+            }
+        }
+
+        // Validate properties file
+        stage("Validate PropFile") {
+            steps {
+              script {
+                  dir(env.WORKSPACE){
+                    // Get property file commit author and author and commit message
+                    PROPERTIESFILE_COMMIT_AUTHOR=sh(script: "git log -n 1 --pretty=format:\"%an\" -- \"${DeplPropFile}\" | awk \'{ \$NF=\"\";print}\'", returnStdout: true).trim()
+                    PROPERTIESFILE_COMMIT_MESSAGE=sh(script: "git log -n 1 -- \"${DeplPropFile}\" | tail -1", returnStdout: true).trim()
+                    println("Author: " + PROPERTIESFILE_COMMIT_AUTHOR)
+                    println("Comment: " + PROPERTIESFILE_COMMIT_MESSAGE)
+
+                    // No. of entries in properties file
+                    def propFile = readFile file: DeplPropFile
+                    def inputServicesList = propFile.readLines()
+                    SERVICESCOUNT=inputServicesList.size()
+
+                    def serialServicesList = readFile file: SerialServicesListFile
+                    serialServicesList = serialServicesList.readLines()
+
+                    //serialPropFile = env.WORKSPACE + '/' + SerialServicesPropFile
+                    //parallelPropFile = env.WORKSPACE + '/' + ParallelServicesPropFile
+                    //naPropFile = env.WORKSPACE + '/' + NAServicesPropFile
+
+                    if (SERVICESCOUNT > 0) {
+                        inputServicesList.each { SERVICE ->
+                            def serialServiceMatched = serialServicesList.findAll { it.contains(SERVICE.tokenize('=')[0].trim()) }
+                            if(SERVICE.tokenize('=')[-1].trim() == 'NA') {
+                                //println('Service Version NA: ' + SERVICE)
+                                // list of NA SERVICES
+                                sh "echo $SERVICE >> $NAServicesPropFile"
+                            } else if(serialServiceMatched) {
+                                //println('Serial Service: ' + SERVICE)
+                                // list of serial deployment SERVICES
+                                sh "echo $SERVICE >> $SerialServicesPropFile"
+                            } else {
+                                // list of parallel deployment SERVICES
+                                //println('Parallel Service: ' + SERVICE)
+                                sh "echo $SERVICE >> $ParallelServicesPropFile"
+                            }
+                        }
+                        // Service Count
+                        sh "cat $SerialServicesPropFile"
+                        SSCOUNT = getLineCountInfile(SerialServicesPropFile)
+                        PSCOUNT = getLineCountInfile(ParallelServicesPropFile)
+                        NACOUNT = getLineCountInfile(NAServicesPropFile)
+                        println('Services Serial:'+SSCOUNT +', Parallel:' +PSCOUNT+ ', NA:'+NACOUNT )
+                    }
+                  }
+              }
+            }
+        }
+
+        // Preperation
+        stage("Report Prepration") {
+                when {
+                    expression { SERVICESCOUNT > 0 }
+                }
+            steps{
+                script {
+                    dir(env.WORKSPACE) {
+                        def ReportHeader = 'ServiceName, Version, JenkinsBuildConsoleOutputURL, BuildResult'
+                        sh "echo $ReportHeader > $REPORT_CSV_FILE"
+                    }
+                }
+            }
+        }
+
+        // Deployments //
+
+        // Serial
+        stage("Serial Deployments") {
+            when {
+                expression { SERVICESCOUNT > 0 && SSCOUNT > 0 }
+            }
+            steps {
+                script {
+                    dir(env.WORKSPACE) {
+                        def deployType = 'serial'
+                        def serialPropFile = readFile file: SerialServicesPropFile
+                        def serial_services_list = serialPropFile.readLines()
+                        def deployResult = deployFromProps(serial_services_list, deployType, agentName)
+                        if (!deployResult.toBoolean()) {
+                            DEPLOY_RESULT_STATUS = false
+                            println('Serial job failed, so skip Parallel')
+                        }
+                    }
+                }
+            }
+        }
+
+        // Parallel when serial has no failure
+        stage("Parallel Deployments") {
+            when {
+                    expression { SERVICESCOUNT > 0 && PSCOUNT > 0 && DEPLOY_RESULT_STATUS}
+            }
+            steps {
+                script {
+                    dir(env.WORKSPACE) {
+                        def deployType = 'parallel'
+                        def parallelPropFile = readFile file: ParallelServicesPropFile
+                        def parallel_services_list = parallelPropFile.readLines()
+                        def deployResult = deployFromProps(parallel_services_list, deployType, agentName)
+                        if (!deployResult.toBoolean()) {
+                            DEPLOY_RESULT_STATUS = false
+                            println('Some Parallel Jobs are Failed')
+                        } else{
+                          println('All Parallel Jobs are Success')
+                        }
+                    }
+                }
+            }
+        }
+
+        // Generate HTML Repot File
+        stage("Generate HTML Report File") {
+            when {
+                expression { SERVICESCOUNT > 0 }
+            }
+            steps{
+                dir(env.WORKSPACE) {
+                    script {
+                        // Validate csv file
+                        def reportSize = readFile file: REPORT_CSV_FILE
+                        ReportSize = reportSize.readLines().size()
+                        if (ReportSize > 0) {
+                            sh "cat ${REPORT_CSV_FILE}"
+                        } else {
+                            println('Result is null no SERVICES')
+                        }
+
+                        // Generate html report file
+                        sh '''
+                              cat ${REPORT_CSV_FILE}
+                              report_gen() {
+                                  echo "<table class=\"table1\" border=\"3\" bordercolor=\"black\">"
+                                  header=true
+                                  while read LINE; do
+                                    if $header;then
+                                        echo "<tr><th>${LINE//,/</th><th>}</th></tr>"
+                                        header=false
+                                    else
+                                        echo "<tr><td>${LINE//,/</td><td>}</td></tr>"
+                                    fi
+                                  done < ${REPORT_CSV_FILE}
+                                  echo "</table>"
+                              }
+                              report_gen > ${HTML_REPORT_FILE}
+                        '''
+                      }
+                }
+            }
+        }
+
+        // Sent email Notification
+        stage("Notification") {
+            steps {
+                script {
+                      REPORT_HEADER_HTML = """
+                        <html>
+                          <style>
+                          pre, ul, li, body {
+                                        font-family: 'Calibri';
+                                        font-size: 12px;
+                                }
+                          .par {
+                                  font-family: 'Calibri';
+                                  font-size: 12px;
+                              }
+                          .title {
+                                        font-family: 'Rockwell Extra Bold';
+                                        font-size: 20px;
+                                        color:red;
+                                        background-color: gold;
+                                        text-align: center;
+                                  }
+                          .foot {
+                                        font-family: 'Calibri';
+                                        font-size: 15px;
+                                        color:black;
+                                        background-color: #ffad99;
+                                        text-align: center;
+                                 }
+                          .foot1 {
+                                        font-family: 'Calibri';
+                                        font-size: 18px;
+                                        color:black;
+                                        background-color: lightblue;
+                                        text-align: center;
+                                 }
+                      <!--  Table 1: Style  Start here -->
+                          table {
+                                        width: 100%;
+                                        text-align: center;
+                                        border-collapse: collapse;
+                                 }
+                              th {
+                                        padding: 10px 5px;
+                                        font-family: 'Calibri';
+                                        border: 1px solid #fff23df;
+                                 }
+                              td {
+                                        padding: 5px 10px;
+                                        border-collapse: collapse;
+                                        text-align: center;
+                                        font-family: 'Calibri';
+                                        font-size: 14px;
+                                 }
+                       tbody, td {
+                                        background: #D0E4F5;
+                                 }
+                       thead, th {
+                                        font-size: 16px;
+                                        font-weight: bold;
+                                        color: #AED6F1;
+                                        background: #1C6EA4;
+                                        background: -moz-linear-gradient(top, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                        background: -webkit-linear-gradient(top, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                        background: linear-gradient(to bottom, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                 }
+                         </style>
+                         <body>
+                     """
+
+                      REPORT_FOOTER = """
+                           </ul>
+                           <br></br>
+                           <p class='foot1'>[ This is an auto generated email, please do not reply. If you have any queries, please email to <a href='mailto:specialty_platform_engg@CVSHealth.com?subject=${NOTIFY_SUBJECT}'>Platform Engg</a> ]</p>
+                           </body>
+                           </html>
+                      """
+
+                      // Report have data
+                      if(SERVICESCOUNT > 0) {
+                          //sh "cat ${HTML_REPORT_FILE}"
+
+                          REPORT_HEADER = '<h2 style="text-align:center"><font style="background-color:lightblue;color:black">' + "${EMAIL_REPORT_HEADER}" + '</font></h2>'
+                          REPORT_BODY = sh(script: "cat ${HTML_REPORT_FILE}", returnStdout: true).trim()
+                          REPORT_COMMIT = "Build Initiated By:&nbsp;${PROPERTIESFILE_COMMIT_AUTHOR}"
+                          REPORT_COMMIT_MSG = "Comment: ${PROPERTIESFILE_COMMIT_MESSAGE}"
+                      }
+
+                      // Report is Blank i.e no SERVICES
+                      else {
+                        REPORT_HEADER = "<h2 align='center'>SERIAL DEPLOYMENTS COMMUNICATION</h2>"
+                        REPORT_BODY="""
+                                  <h1 style="background-color:#FFC300 ;">!! No deployments planned in this window !!</h1>
+                        """
+                        REPORT_COMMIT = ""
+                        REPORT_COMMIT_MSG = ""
+                      }
+
+                      EMAIL_CONTENT = REPORT_HEADER_HTML + "<body><center>" +
+                                      REPORT_HEADER +
+                                      """
+                                        <br></br>
+                                        <ul style="color:#3B240B">
+                                      """ +
+                                      REPORT_BODY + "</center><br>" +
+                                     //REPORT_COMMIT + "<br>" +
+                                     //REPORT_COMMIT_MSG + "<br>" +
+                                      REPORT_FOOTER
+
+                } // end scripts
+                println(EMAIL_CONTENT)
+                sh "cat $REPORT_CSV_FILE"
+          } // end steps
+      } // end stage
+    } // end stages
+
+    post{
+        success {
+            script {
+                   println('Deploy Status: ' + DEPLOY_RESULT_STATUS)
+                   println('Notify Email: ' +  EMAIL_NOTIFICATION)
+                   println("!! Deployment Completed !!")
+
+                   //return final status
+                   if(!DEPLOY_RESULT_STATUS.toBoolean()) {
+                        if(EMAIL_NOTIFICATION.toBoolean()) {
+                            println('Sending Failure email with attachment...')
+                            NOTIFY_SUBJECT = 'Failed : ' + NOTIFY_SUBJECT
+                            emailext(
+                              attachmentsPattern: 'FAILED_REPORT.properties',
+                              mimeType: 'text/html',
+                              body: EMAIL_CONTENT,
+                              subject: NOTIFY_SUBJECT,
+                              to: NOTIFY_TO
+                            )
+                            NOTIFYED = true
+                        }
+                        // Return failure if any service check is failed
+                        error('Some Service check Failed and skipped.')
+                   } else {
+                        if(EMAIL_NOTIFICATION.toBoolean()) {
+                            println('Sending Success email...')
+                            emailext mimeType: 'text/html',
+                            body: EMAIL_CONTENT,
+                            subject: 'Success: ' + NOTIFY_SUBJECT,
+                            to: NOTIFY_TO
+                            NOTIFYED = true
+                       }
+                   }
+            }
+        }
+
+        failure {
+            script {
+                      println("!!!!!!!!!!!!!!!!!!!!!  FAILED  FAILED  FAILED  FAILED  FAILED  FAILED !!!!!!!!!!!!!!!!!!!!!")
+                      if(NOTIFYED.toBoolean() && EMAIL_NOTIFICATION.toBoolean()) {
+                          println('Sending Failed email ...')
+                          NOTIFY_SUBJECT = NOTIFY_SUBJECT + ": --- FAILED ---"
+                          emailext mimeType: 'text/html',
+                          body: 'DEPLOYMENT FAILED !!',
+                          subject: NOTIFY_SUBJECT,
+                          to: NOTIFY_TO
+                      }
+             }
+         }
+    }
+}
+
+// end
