@@ -1,0 +1,117 @@
+---
+#
+#
+# The following code assumes that it is being executed from an EC2 instance running in Univar's AWS account that has
+# the digitalcommerce-magento-ansible-ec2-role IAM Role attached to it. Ansible polls the local EC2 instance metadata
+# and assumes the IAM role. After that Ansible obtains a temporary STS Token and AWS Keys which are then later used
+# for dynamic inventory discovery. Those temporary credentials are valid for 6 hours, or 21600 seconds.
+#
+- name: get AWS Metadata token from local instance metadata
+  uri:
+    url: http://169.254.169.254/latest/api/token
+    method: PUT
+    follow_redirects: yes
+    return_content: yes
+    headers:
+      X-aws-ec2-metadata-token-ttl-seconds: 21600
+  register: metadata_token_response
+​
+- set_fact:
+    metadata_token: "{{ metadata_token_response.content }}"
+​
+#- debug:
+#    var: metadata_token
+​
+- name: get AWS API Keys using AWS Metadata Token
+  uri:
+    url: http://169.254.169.254/latest/meta-data/iam/security-credentials/digitalcommerce-magento-ansible-ec2-role
+    method: GET
+    follow_redirects: yes
+    return_content: yes
+    headers:
+      X-aws-ec2-metadata-token: "{{ metadata_token }}"
+  register: sts_response
+​
+- set_fact:
+    AWS_ACCESS_KEY: "{{ sts_response.json.AccessKeyId }}"
+    AWS_SECRET_KEY: "{{ sts_response.json.SecretAccessKey }}"
+    AWS_SECURITY_TOKEN: "{{ sts_response.json.Token }}"
+​
+#
+#  Actual dynamic inventory discovery begins here
+#
+############################################################################################
+- block:
+  - name: fetch running Admin instance data from the metadata servers in ec2
+    ec2_instance_facts:
+      aws_access_key: "{{ AWS_ACCESS_KEY }}"
+      aws_secret_key:  "{{ AWS_SECRET_KEY }}"
+      security_token: "{{ AWS_SECURITY_TOKEN }}"
+      region: "{{ region }}"
+      filters:
+        "tag:site-tag-for-ansible": "{{ site_tag }}"
+        "tag:app-tag-for-ansible": "magento"
+        "tag:env-tag-for-ansible": "{{ instanceEnv }}"
+        "tag:tier-tag-for-ansible": "admin"
+        "instance-state-name" : "running"
+    register: ec2admin_instances
+  #
+  - name: add Admin hosts to in-memory inventory
+    add_host:
+      groups: "Admin"
+      ansible_user: ec2-user
+      become: yes
+      become_method: sudo
+      ansible_host: "{{ item.0 }}"
+      hostname: "{{ item.1 }}-{{ item.0.split('.')[3] }}"
+      ansible_ssh_private_key_file: "/opt/aws/pems/{{ item.2 }}.pem"
+    with_together:
+       - "{{ ec2admin_instances.instances| map(attribute='private_ip_address') | list }}"
+       - "{{ ec2admin_instances.instances| map(attribute='tags.Name') | list }}"
+       - "{{ ec2admin_instances.instances| map(attribute='key_name') | list}}"
+       - "{{ ec2admin_instances.instances| map(attribute='instance_id') | list }}"
+    when: ec2admin_instances is defined
+​
+#  - name: get the one admin instance for run setup:upgrade
+#      set_fact:
+#      admin_setup_upgrade_instance_id: "{{  }}"
+​
+​
+  - name: fetch running Web instance data from the metadata servers in ec2
+    ec2_instance_facts:
+      aws_access_key: "{{ AWS_ACCESS_KEY }}"
+      aws_secret_key:  "{{ AWS_SECRET_KEY }}"
+      security_token: "{{ AWS_SECURITY_TOKEN }}"
+      region: "{{ region }}"
+      filters:
+        "tag:site-tag-for-ansible": "{{ site_tag }}"
+        "tag:app-tag-for-ansible": "magento"
+        "tag:env-tag-for-ansible": "{{ instanceEnv }}"
+        "tag:tier-tag-for-ansible": "web"
+        "instance-state-name" : "running"
+    register: ec2web_instances
+
+  - name: add Web hosts to in-memory inventory for AutoScaling clients
+    add_host:
+      groups: "Web"
+      ansible_user: ec2-user
+      become: yes
+      become_method: sudo
+      ansible_host: "{{ item.0 }}"
+      hostname: "{{ item.1 }}-{{ item.0.split('.')[3] }}"
+      ansible_ssh_priva… # complete this ...??
+
+## MongoDB
+  - name: MongoDB Group
+    add_host:
+      groups: "mongodb"
+      ansible_user: ec2-user
+      become: yes
+      become_method: sudo
+      ansible_host: "{{ item }}"
+      ansible_ssh_private_key_file: "/opt/aws/pems/{{ item }}.pem"
+      hostname: "{{ item }}"
+    with_items:
+      - 172.17.0.2 # ip of mongodb 
+
+## END
