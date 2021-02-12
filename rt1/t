@@ -1,0 +1,74 @@
+#!/usr/bin/env groovy
+​
+pipeline {
+
+  environment {
+      //Slack definitions
+		  MessageColor = '#FF0000'
+		  ChannelId = "#jenkins"
+	}
+​
+	agent {
+		label 'master'
+	}
+​
+	stages {
+
+		  stage('Cleanup') {
+
+		  	  steps {
+		  	  	  deleteDir()
+              script {
+                  currentBuild.displayName = "${env.BUILD_NUMBER}-${SITE}-${env.ENVIRONMENT}"
+              }
+		  	  }
+
+		  }
+​
+		  stage("Create DB Backup - ${env:ENVIRONMENT}") {
+
+          environment {
+		  	  	  ANSIBLE_CONFIG = "${env.WORKSPACE}/ansible/ansible.cfg"
+              ansible_extra_vars = "--extra-vars=@ansible/group_vars/mongodb-${env.ENVIRONMENT}.yml"
+		  	  }
+​
+		  	  steps {
+            ​println('Running Ansible playbook')
+            // Run Ansible Code
+            ansiColor('xterm') {
+                ansiblePlaybook(
+                    installation: "/bin/ansible",
+                    playbook: "ansible/plays/create_db_backup.yml",
+                    extras: "${ansible_extra_vars}",
+                    colorized: true
+                )
+		  	  	}
+		  	  }
+		  }​
+	}
+  post {
+
+    success {
+        println('Backup Success!')
+        SlackMsg = currentBuild.displayName + ':' + 'MongoDB Backup Successfull'
+    }
+
+    failure {
+        println('Backup Failure!!')
+        SlackMsg = currentBuild.displayName + ':' + 'MongoDB Backup Failed'
+    }
+
+    always {
+        println("Sending Notification To Slack Channel: $ChannelId - Message: \"$SlackMsg\"")
+        //slackSend(
+        //    color: "${MessageColor}",
+        //    channel: "${ChannelId}",
+        //    message: "${SlackMsg}"
+        //)
+    }
+
+  }
+
+}
+
+// End
