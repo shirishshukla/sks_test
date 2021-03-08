@@ -1,297 +1,134 @@
-// /////////////////////////////////////////////////////////////////////////////
-//
-//  Script to stream cloudtrail events gz file to AWS ElasticSearch
-//
-// /////////////////////////////////////////////////////////////////////////////
-// v1.1
+#///////////////////////////////////////////////////////////////////////////////
+#//
+#// Script to stream cloudtrail events gz file to AWS ElasticSearch
+#//
+#///////////////////////////////////////////////////////////////////////////////
 
-var https = require('https');
-var zlib = require('zlib');
-var crypto = require('crypto');
+## Prerequisite if botocore vendored request not present
+# pip3 install --target python requests
+# zip -r requests.zip python
+# AWS:
+#   - console > lambda > layers > create layer =>
+#   - console > functions > create function => in the "designer" box select layers and then "add layers." Choose custom layers and select your layer.
+########
 
-var endpoint = 'CHANGHE-THIS';
+# required: python 3.6+
 
-// Set this to true if you want to debug why data isn't making it to
-// your Elasticsearch cluster. This will enable logging of failed items
-// to CloudWatch Logs.
-var logFailedResponses = false;
+import json
+import gzip
+import datetime
+import hashlib
+import hmac
+import boto3
+import os
+import tempfile
+# import requests
+from botocore.vendored import requests
 
-exports.handler = function(event, context) {
+##########################################################################
+# variables to be set in the lambda environment
+esHost = os.environ.get('ES_HOST') or 'vpc......us-west-2.es.amazonaws.com'
 
-    ////  Download event file  ////
-    // The source bucket and source key are part of the event data
-    if (event.Records == null) {
-        context.fail('Error', "Event has no records.");
-        return;
-    }
+# ctl-YYYY-MM-DD
+indexName = os.environ.get('ES_INDEX') or 'ctl'
+csIndexDir = os.environ.get('ES_INDEX_DIR') or 'cloudtrail'
 
-    var input =  event.Records[0];
-    var srcBucket = input.s3.bucket.name;
-    var srcKey = decodeURIComponent(input.s3.object.key.replace(/\+/g, " "));
+# Retry count # if failed to stream to ES retry 3 times ..
+maxRetry = 3
 
-    const s3keyparam = {
-        Bucket: srcBucket,
-        Key: srcKey
-    };
+# List of events to be ignored
+ignoreEventsList = ['describeInstanceHealth', 'test']
+##########################################################################
 
-    console.log('S3 Event File: s3://' + srcBucket + '/' + srcKey);
+# Do not Change
+content_type = 'application/json'
 
-    s3.getObject(s3keyparam, (err, data) => {
-        if (err) {
-            console.log(err);
-            const message = `Error getting object ${srcKey} from bucket ${srcBucket}. Make sure they exist and your bucket is in the same region as this function.`;
-            console.log(message);
-        } else {
+# defines a s3 boto client
+s3 = boto3.client('s3')
 
-            // decode input from base64
-            //var zippedInput = new Buffer.from(input.awslogs.data, 'base64');
+# main function, started by lambda
+def lambda_handler(event, context):
+    # attribute bucket and file name/path to variables
+    bucket = event['Records'][0]['s3']['bucket']['name']
+    key = event['Records'][0]['s3']['object']['key']
 
-            // decompress the input
-            zlib.gunzip(s3keyparam, function(error, buffer) {
+    # minimal error handling
+    if( bucket == None or key == None ):
+        return
 
-                if (error) { context.fail(error); return; }
+    # where to save the downloaded file
+    localFile = tempfile.NamedTemporaryFile(mode='w+b',delete=False)
 
-                // parse the input from JSON
-                var awslogsData = JSON.parse(buffer.toString('utf8'));
+    # downloads file to above temp path
+    s3.download_fileobj(bucket, key, localFile)
+    localFile.close()
+    # uncompress and load to variable
+    gzfile = gzip.open(localFile.name, "r")
 
-                // transform the input to Elasticsearch documents
-                var elasticsearchBulkData = transform(awslogsData);
+    # loads contents of the Records key into variable (our actual cloudtrail log entries!)
+    eventsList = json.loads(gzfile.readlines()[0])
 
-                // skip control messages
-                if (!elasticsearchBulkData) {
-                    console.log('Received a control message');
-                    context.succeed('Control message handled successfully');
-                    return;
-                }
+    if 'Records' not in eventsList:
+        print('Not CloudTrail logs ignoring.')
+        return
 
-                // post documents to the Amazon Elasticsearch Service
-                post(elasticsearchBulkData, function(error, success, statusCode, failedItems) {
-                    console.log('Response: ' + JSON.stringify({
-                        "statusCode": statusCode
-                    }));
+    eventCount = 1
+    # For each events ...
+    for record in eventsList['Records']:
+        # Ignore ceertain unwanted events
+        if ( record['eventName'] == ignoreEventsList ):
+            continue
 
-                    if (error) {
-                        logFailure(error, failedItems);
-                        context.fail(JSON.stringify(error));
-                    } else {
-                        console.log('Success: ' + JSON.stringify(success));
-                        context.succeed('Success');
-                    }
-                }); // end post
-            }); // end zlib
-          };
-      }); // end s3.getObject
-};
+        # pop out eventVersion key, as of no use
+        record.pop('eventVersion', None)
 
-function transform(payload) {
-    if (payload.eventName === 'CONTROL_MESSAGE') {
-        return null;
-    }
+        # adds @timestamp field = time of the event, can be used is main key in ES
+        record['@timestamp'] = record['eventTime']
+        record['@id'] = record['eventID']
 
-    var bulkRequestBody = '';
+        # removes amazonaws.com from eventsources, eg. cloudformation.amazonaws.com will be cloudformation
+        record['eventSource'] = record['eventSource'].split('.')[0]
+        data = json.dumps(record).encode('utf-8')
 
-    payload.logEvents.forEach(function(logEvent) {
-        var timestamp = new Date(logEvent.eventTime);
+        # Extract index date format for ES, i.e ctl-2020-12-27/_cloudtrail
+        event_date = record['eventTime'].split('T')[0]
 
-        // index name format: ctl-YYYY.MM.DD
-        var indexName = [
-            'ctl-' + timestamp.getUTCFullYear(),              // year
-            ('0' + (timestamp.getUTCMonth() + 1)).slice(-2),  // month
-            ('0' + timestamp.getUTCDate()).slice(-2)          // day
-        ].join('.');
+        # url endpoint for ES cluster domain
+        url = 'https://' + esHost + '/' + indexName + '-' + event_date + '/' + csIndexDir
+        #print('Total Events: {} url : {}\n'.format(eventCount, url))
 
-        var source = buildSource(logEvent, logEvent.extractedFields);
-        source['@id'] = logEvent.eventID;
-        source['@timestamp'] = new Date(logEvent.timestamp).toISOString();
-        source['@message'] = logEvent;
+        # Post Event to ES
+        tm = datetime.datetime.utcnow()
+        amz_date = tm.strftime('%Y%m%dT%H%M%SZ')
+        headers = {'Content-Type':content_type,'X-Amz-Date':amz_date}
 
-        var action = { "index": {} };
-        action.index._index = indexName;
-        action.index._type = payload.eventSource;
-        action.index._id = logEvent.eventID;
+        # sends the json to elasticsearch
+        ret = requests.post(url, data=data, headers=headers)
+        #print('Attempt 1 status code: {}'.format(ret.status_code))
+        if ret.status_code == 201:
+            print('Successfully posted to ES')
+        else:
+            print('Failed to post event {} to ES, Retrying... {} times'.format(data, maxRetry))
+            # If Failed to post to ES ... retry 3 more times
+            retry_counter = 1
+            while (ret.status_code != 201) and (retry_counter <= maxRetry):
+                print('Attempt: {}'.format(retry_counter))
+                # send the data to ES again
+                ret = requests.post(url, data=data, headers=headers)
+                print('Status Code: {}'.format(ret.status_code))
+                if ret.status_code == 201:
+                    print('Successfully posted to ES')
+                    break
+                else:
+                    print('Failed to post event to ES, Retrying...')
+                time.sleep(2) # sleep for 2 seconds
+                retry_counter += 1
 
-        bulkRequestBody += [
-            JSON.stringify(action),
-            JSON.stringify(source),
-        ].join('\n') + '\n';
-    });
-    return bulkRequestBody;
-}
+        eventCount += 1
 
-function buildSource(message, extractedFields) {
-    if (extractedFields) {
-        var source = {};
+    # cleanup local vars
+    localFile.close()
+    os.unlink(localFile.name)
+    print('Processed: {} events in {}'.format(eventCount, localFile.name) )
 
-        for (var key in extractedFields) {
-            if (extractedFields.hasOwnProperty(key) && extractedFields[key]) {
-                var value = extractedFields[key];
-
-                if (isNumeric(value)) {
-                    source[key] = 1 * value;
-                    continue;
-                }
-
-                jsonSubString = extractJson(value);
-                if (jsonSubString !== null) {
-                    source['$' + key] = JSON.parse(jsonSubString);
-                }
-
-                source[key] = value;
-            }
-        }
-        return source;
-    }
-
-    jsonSubString = extractJson(message);
-    if (jsonSubString !== null) {
-        return JSON.parse(jsonSubString);
-    }
-
-    return {};
-}
-
-function extractJson(message) {
-    var jsonStart = message.indexOf('{');
-    if (jsonStart < 0) return null;
-    var jsonSubString = message.substring(jsonStart);
-    return isValidJson(jsonSubString) ? jsonSubString : null;
-}
-
-function isValidJson(message) {
-    try {
-        JSON.parse(message);
-    } catch (e) { return false; }
-    return true;
-}
-
-function isNumeric(n) {
-    return !isNaN(parseFloat(n)) && isFinite(n);
-}
-
-function post(body, callback) {
-    var requestParams = buildRequest(endpoint, body);
-
-    var request = https.request(requestParams, function(response) {
-        var responseBody = '';
-        response.on('data', function(chunk) {
-            responseBody += chunk;
-        });
-
-        response.on('end', function() {
-            var info = JSON.parse(responseBody);
-            var failedItems;
-            var success;
-            var error;
-
-            if (response.statusCode >= 200 && response.statusCode < 299) {
-                failedItems = info.items.filter(function(x) {
-                    return x.index.status >= 300;
-                });
-
-                success = {
-                    "attemptedItems": info.items.length,
-                    "successfulItems": info.items.length - failedItems.length,
-                    "failedItems": failedItems.length
-                };
-            }
-
-            if (response.statusCode !== 200 || info.errors === true) {
-                // prevents logging of failed entries, but allows logging
-                // of other errors such as access restrictions
-                delete info.items;
-                error = {
-                    statusCode: response.statusCode,
-                    responseBody: info
-                };
-            }
-
-            callback(error, success, response.statusCode, failedItems);
-        });
-    }).on('error', function(e) {
-        callback(e);
-    });
-    request.end(requestParams.body);
-}
-
-function buildRequest(endpoint, body) {
-    var endpointParts = endpoint.match(/^([^\.]+)\.?([^\.])\.?([^\.])\.amazonaws\.com$/);
-    var region = endpointParts[2];
-    var service = endpointParts[3];
-    var datetime = (new Date()).toISOString().replace(/[:\-]|\.\d{3}/g, '');
-    var date = datetime.substr(0, 8);
-    var kDate = hmac('AWS4' + process.env.AWS_SECRET_ACCESS_KEY, date);
-    var kRegion = hmac(kDate, region);
-    var kService = hmac(kRegion, service);
-    var kSigning = hmac(kService, 'aws4_request');
-
-    var request = {
-        host: endpoint,
-        method: 'POST',
-        path: '/_bulk',
-        body: body,
-        headers: {
-            'Content-Type': 'application/json',
-            'Host': endpoint,
-            'Content-Length': Buffer.byteLength(body),
-            'X-Amz-Security-Token': process.env.AWS_SESSION_TOKEN,
-            'X-Amz-Date': datetime
-        }
-    };
-
-    var canonicalHeaders = Object.keys(request.headers)
-        .sort(function(a, b) { return a.toLowerCase() < b.toLowerCase() ? -1 : 1; })
-        .map(function(k) { return k.toLowerCase() + ':' + request.headers[k]; })
-        .join('\n');
-
-    var signedHeaders = Object.keys(request.headers)
-        .map(function(k) { return k.toLowerCase(); })
-        .sort()
-        .join(';');
-
-    var canonicalString = [
-        request.method,
-        request.path, '',
-        canonicalHeaders, '',
-        signedHeaders,
-        hash(request.body, 'hex'),
-    ].join('\n');
-
-    var credentialString = [ date, region, service, 'aws4_request' ].join('/');
-
-    var stringToSign = [
-        'AWS4-HMAC-SHA256',
-        datetime,
-        credentialString,
-        hash(canonicalString, 'hex')
-    ] .join('\n');
-
-    request.headers.Authorization = [
-        'AWS4-HMAC-SHA256 Credential=' + process.env.AWS_ACCESS_KEY_ID + '/' + credentialString,
-        'SignedHeaders=' + signedHeaders,
-        'Signature=' + hmac(kSigning, stringToSign, 'hex')
-    ].join(', ');
-
-    return request;
-}
-
-function hmac(key, str, encoding) {
-    return crypto.createHmac('sha256', key).update(str, 'utf8').digest(encoding);
-}
-
-function hash(str, encoding) {
-    return crypto.createHash('sha256').update(str, 'utf8').digest(encoding);
-}
-
-function logFailure(error, failedItems) {
-    if (logFailedResponses) {
-        console.log('Error: ' + JSON.stringify(error, null, 2));
-
-        if (failedItems && failedItems.length > 0) {
-            console.log("Failed Items: " +
-                JSON.stringify(failedItems, null, 2));
-        }
-    }
-}
-
-
-// End
+## END
