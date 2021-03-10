@@ -1,0 +1,73 @@
+# packer template
+"storage": [
+    {
+      "disk_size": "{{ user `additional_disk_size` }}",
+      "disk_thin_provisioned": true
+    }
+  ],
+
+  "provisioners": [
+    {
+        "type": "ansible-local",
+        "playbook-file": "ansible/linux/RHEL7/playbooks/additional_disk_size.yml",
+        "inventory_groups": "{{ user `pattern` }}",
+        "playbook-dir": "ansible/linux/RHEL7/playbooks",
+        "extra_arguments": "{{ user `additional_disk_vars` }}"
+    }
+    ...
+    ...
+    ...
+
+## File: ansible/linux/RHEL7/playbooks/additional_disk_size.yml
+---
+- hosts: localhost
+  tasks:
+  - name: Add additional disk and create LVs
+    include_role:
+        name: additional_disk
+    vars:
+        action: additional_disks
+
+## roles/additional_disk/tasks/main.yml
+---
+
+  - name: Discover Disks
+    set_fact:
+      disks: "{{ disks|default([]) + ['/dev/'+itm.key] }}"
+    when:
+      - not item.value.partitions
+      - not item.value.holder
+      - not item.value.links.ids
+      - item.key is search('sd')
+      - itm.value.size is search('GB')
+      - itm.value.size.split()[0]|int > additional_disks.disk_size.split('GB')[0]|int
+   with_dicts: "{{ ansible_devices }}"
+
+  - assert:
+      that:
+        - disks|length == 1
+      failed_msg: "Total additional disk {{ disks|length }} should be 1"
+      success_msg: "Total additional disk ( {{ disks }} ) is {{ disks|length }}"
+
+  - name: Create the VG01 Volume group.
+    lvg:
+      pvs: "{{ disks[0] }}"
+      vg: "{{ vg_name }}"
+      force: no
+      state: present
+    vars:
+      vg_name: "VG01"
+
+  - name: Create Logical Volumes
+    lvol:
+      vg: "{{ vg_name }}"
+      lv: "{{ 'lv_' + item.key.replace('/', '_') }}"
+      size: "{{ item.value }}"
+      active: yes
+      force: no
+      state: present
+    vars:
+      vg_name: "VG01"
+    with_dict: "{{ additional_disks.lvs }}"
+## still to add 
+## END
