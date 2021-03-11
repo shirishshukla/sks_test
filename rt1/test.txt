@@ -69,5 +69,36 @@
     vars:
       vg_name: "VG01"
     with_dict: "{{ additional_disks.lvs }}"
-## still to add 
+
+  - name: Format LVs
+  filesystem:
+    fstype: xfs
+    dev: "{{ '/dev/' + vg_name + '/' + 'lv_' + item.key.replace('/', '_') }}"
+  with_dict: "{{ additional_disks.lvs }}"
+
+  - name: Create Mount Folders
+    file:
+      path: "{{ item.key }}"
+      state: directory
+      recurse: yes
+    with_dict: "{{ additional_disks.lvs }}"
+
+  - name: Add entry in fstab
+    lineinfile:
+      path: /etc/fstab
+      regixp: "^{{ fs }} "
+      line: "{{ fs + '  ' + mp + '  ' +  fm + '  ' + opt }}"
+    vars:
+      fs: "{{ '/dev/' + vg_name + '/' + 'lv_' + item.key.replace('/', '_') }}"
+      mp: "{{ item.key }}"
+      fm: "xfs"
+      opt: "defaults 0 0"
+    with_dict: "{{ additional_disks.lvs }}"
+
+  - name: Mount additional disks
+    command: mount -a
+
+  - debug:
+      msg: "additional File system mount done."
+
 ## END
