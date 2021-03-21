@@ -1,7 +1,8 @@
-# TF Code
+## TF Code
  `Terraform module for deploying Infrastructre for streaing logs from S3 to Elasticsearch`
 
 ### AWS Elasticsearch module
+*Module to create Elasticsearch domain*
 
 ### AWS Lambda Function
 *Lambda Function to stream logs received in S3 bucket to Elasticsearch domain*
