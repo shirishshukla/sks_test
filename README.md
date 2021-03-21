@@ -4,7 +4,7 @@
 ### AWS Elasticsearch module
 
 ### AWS Lambda Function
-*Lambda Function to stream logs received in S3 bucket to Elasticsearch domain
+*Lambda Function to stream logs received in S3 bucket to Elasticsearch domain*
 
 #### Lambda layers "requests"
 `Create Lambda layer for python "requests" module.`
