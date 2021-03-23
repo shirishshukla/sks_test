@@ -1,0 +1,739 @@
+##
+# Description:
+##
+
+AWSTemplateFormatVersion: "2010-09-09"
+Description: "AWS CF to deploy MongoDB Instances"
+
+Parameters:
+# Instance AZ
+  InstanceAZ:
+    Description: EC2 Availibility Zone
+    Type: AWS::EC2::AvailabilityZone::Name
+    ConstraintDescription: Must be the name of an availabity zone.
+    Default: eu-west-1a
+
+# Instance Type
+  InstanceType:
+    Description: 'MongoDB Instance type'
+    Type: String
+    Default: r5.large
+    # AllowedValues: [t2.nano, t2.micro, t2.small, t2.medium, t2.large, t2.xlarge, t2.2xlarge]
+    ConstraintDescription: 'Should be a valid instance type.'
+# SSH Key
+  SSHKeyName:
+    Description: 'Public Key for accessing nodes'
+    Type: 'AWS::EC2::KeyPair::KeyName'
+    Default: mongo-prod
+    ConstraintDescription: 'Should be a valid existing EC2 KeyPair'
+
+# Volumes
+  RootVolumeSize:
+    Description: Size of Root EBS Volume
+    Type: Number
+    Default: 20
+  DataVolumeSize:
+    Description: Size of Data EBS Volume
+    Type: Number
+    Default: 300
+  LogVolumeSize:
+    Description: Size of Log EBS Volume
+    Type: Number
+    Default: 100
+  JournalVolumeSize:
+    Description: Size of Log EBS Volume
+    Type: Number
+    Default: 40
+
+  VolEncryption:
+    Description: Is Volume to be encrypted
+    Type: String
+    Default: true
+    AllowedValues: [true, false]
+
+  KMSAliasName:
+    Description: Is Volume to be encrypted
+    Type: String
+    Default: univar-kms-lpv-aws-mongodb
+
+# VPC
+  VPCID:
+    Description: The VPC of the ec2 instances
+    Type: AWS::EC2::VPC::Id
+    Default: vpc-xxxxxx
+
+# Subnet
+  SubnetID:
+    Description: The ID of the private subnet 1A in Availability Zone.
+    Type: AWS::EC2::Subnet::Id
+    Default: subnet-f2ded8d9
+
+# Security Group
+#  SecurityGroupIDs:
+#    Description: Custom Security Group for Consul Instance
+#    Type: List<AWS::EC2::SecurityGroup::Id>
+#    Default: sg-xxxxxx
+
+##Tags
+# Environment
+  InstanceName:
+    Description: Instance Name
+    Type: String
+    Default: LPV-AWS-MONGODBCSTMR01
+  EnvironmentName:
+    Description: Environment Name
+    Type: String
+    AllowedValues:
+      - PROD
+      - DEV
+      - QA
+    Default: PROD
+  InstanceDescription:
+    Description: Instance Description
+    Type: String
+    Default: Mongodb for customer service
+  InstanceOwner:
+    Description: Instance Owner
+    Type: String
+    Default: Digital
+  InstanceApplication:
+    Description: Instance Application
+    Type: String
+    Default: MongoDB
+  InstanceAlwaysOn:
+    Description: Instance AlwaysOn Yes/Y, No/N
+    Type: String
+    Default: Y
+  InstanceLifecycle:
+    Description: Instance Lifecycle
+    Type: String
+    Default: Permanent
+  mongodbVersion:
+    Description: "
+      MongoDB Version to be installed
+      Refer https://repo.mongodb.org/yum/amazon/2013.03/mongodb-org/ for available versions"
+    Type: String
+    Default: 4.0
+
+# Mapping for AMIID and Device Name and Size
+Mappings:
+  AWSRegionAMiID:
+    eu-west-1:
+      amiID: ami-06b62aecdc0ab191a
+    us-west-2:
+      amiID: ami-xxxx
+  DeviceName:
+    RootVol:
+      Size: 20
+      Type: gp2
+      Device: /dev/xvda
+    DataVol:
+      Size: 300
+      Type: gp2
+      Device: /dev/xvdb
+    LogVol:
+      Size: 100
+      Type: gp2
+      Device: /dev/xvdc
+    JournalVol:
+      Size: 40
+      Type: gp2
+      Device: /dev/xvdd
+
+Conditions:
+  RootVolSize: !Not [!Equals [!Ref RootVolumeSize, ""]]
+  DataVolSize: !Not [!Equals [!Ref DataVolumeSize, ""]]
+  LogVolSize: !Not [!Equals [!Ref LogVolumeSize, ""]]
+  JournalVolSize: !Not [!Equals [!Ref JournalVolumeSize, ""]]
+
+Resources:
+
+  # kms id
+  KMSKey:
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Type: AWS::KMS::Key
+    Properties:
+      EnableKeyRotation: !If [HasSymmetricKey, true, false]
+      KeySpec: SYMMETRIC_DEFAULT
+      KeyUsage: ENCRYPT_DECRYPT
+      KeyPolicy:
+        Version: '2012-10-17'
+        Statement:
+        - Sid: Allow administration of the key
+          Effect: Allow
+          Principal:
+            AWS: !Sub 'arn:aws:iam::${AWS::AccountId}:root'
+          Action: 'kms:*'
+          Resource: '*'
+        - Sid: Allow use of the key
+          Effect: Allow
+          Principal:
+            AWS: arn:aws:iam::111122223333:user/Bob
+          Action:
+          - kms:DescribeKey
+          - kms:Encrypt
+          - kms:Decrypt
+          - kms:ReEncrypt*
+          - kms:GenerateDataKey
+          - kms:GenerateDataKeyWithoutPlaintext
+          Resource: '*'
+
+  # create alias
+  KeyAlias:
+    DeletionPolicy: Retain
+    UpdateReplacePolicy: Retain
+    Type: AWS::KMS::Alias
+    Properties:
+      AliasName: !Sub "alias/${KMSAliasName}"
+      TargetKeyId: !Ref KMSKey
+
+  # Security Group for mongodb
+  MongoDBSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for MongoDB Nodes
+      VpcId: !Ref VPCID
+      Tags:
+        - Key: Name
+          Value: MongoDBSecurityGroup
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: 0.0.0.0/0
+        - IpProtocol: icmp
+          FromPort: -1
+          ToPort: -1
+          CidrIp: 0.0.0.0/0
+
+  # Add Ingress rule to SG
+  ClusterSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    Properties:
+      GroupId:  !Ref MongoDBSecurityGroup
+      IpProtocol: tcp
+      FromPort: 27017
+      ToPort: 27017
+      SourceSecurityGroupId: !Ref MongoDBSecurityGroup
+
+  EC2Instance1:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref SSHKeyName
+      ImageId: !FindInMap [AWSRegionAMiID, !Ref 'AWS::Region', 'amiID']
+      InstanceInitiatedShutdownBehavior: stop
+      Tenancy: default
+      BlockDeviceMappings:
+        - DeviceName: !FindInMap [DeviceName, RootVol, Device]
+          Ebs:
+            VolumeSize: !If [RootVolSize, !Ref RootVolumeSize, !FindInMap [DeviceName, RootVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, RootVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+        - DeviceName: !FindInMap [DeviceName, DataVol, Device] # Root Vol
+          Ebs:
+            VolumeSize: !If [DataVolSize, !Ref RootVolumeSize, !FindInMap [DeviceName, DataVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, DataVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+        - DeviceName: !FindInMap [DeviceName, LogVol, Device]
+          Ebs:
+            VolumeSize: !If [LogVolSize, !Ref LogVolumeSize, !FindInMap [DeviceName, LogVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, LogVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+        - DeviceName: !FindInMap [DeviceName, JournalVol, Device] # Root Vol
+          Ebs:
+            VolumeSize: !If [JournalVolSize, !Ref RootVolumeSize, !FindInMap [DeviceName, JournalVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, JournalVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+      SecurityGroupIds: !Ref MongoDBSecurityGroup
+      SubnetId: !Ref SubnetID
+      Tags:
+        - Key: Name
+          Value: !Ref InstanceName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Description
+          Value: !Ref InstanceDescription
+        - Key: Owner
+          Value: !Ref InstanceOwner
+        - Key: Application
+          Value: !Ref InstanceApplication
+        - Key: AlwaysOn
+          Value: !Ref InstanceAlwaysOn
+        - Key: Lifecycle
+          Value: !Ref InstanceLifecycle
+      UserData:
+        Fn::Base64:
+          !Sub
+          - |
+            #!/bin/bash -xe
+
+            # Update OS
+            #yum update -y
+            #yum update -y aws-cfn-bootstrap
+
+            # Add mongodb repo and install mongodb
+            cat <<EOF>/etc/yum.repos.d/mongodb_repo.repo
+            [mongodb-org-${mongodbVersion}]
+            name=MongoDB Repository
+            baseurl=https://repo.mongodb.org/yum/amazon/2013.03/mongodb-org/${mongodbVersion}/x86_64/
+            gpgcheck=1
+            enabled=1
+            gpgkey=https://www.mongodb.org/static/pgp/server-${mongodbVersion}.asc
+            EOF
+            #
+            yum repolist
+
+            # Format disks
+            mkfs.xfs -L mongodata ${dataDevice}
+            mkfs.xfs -L mongojournal ${logDevice}
+            mkfs.xfs -L mongolog ${journalDevice}
+            # create required directories
+            mkdir /data /journal /log
+            # Add entry in fstab for mount
+            cat <<EOF>>/etc/fstab
+            # MongoDB FSs
+            ${dataDevice}    /data     xfs  defaults,auto,noatime,noexec  0 0
+            ${logDevice}     /log      xfs  defaults,auto,noatime,noexec  0 0
+            ${journalDevice} /journal  xfs  defaults,auto,noatime,noexec  0 0
+            EOF
+
+            # Mount FS
+            mount -a
+            # Create symlink for journal
+            ln -s /journal /data/journal
+
+            # limits
+            cat <<EOF>>/etc/security/limits.conf
+            * soft nofile 64000
+            * hard nofile 64000
+            * soft nproc 32000
+            * hard nproc 32000
+            EOF
+
+            # 90-nproc.conf
+            cat <<EOF>>/etc/security/limits.d/90-nproc.conf
+            * soft nproc 32000
+            * hard nproc 32000
+            EOF
+
+            # Disable Transparent Huge Pages
+
+            # Setup Log Rotation
+            cat <<EOF>>/etc/logrotate.d/mongodb
+            /log/mongod.log {
+              daily
+              rotate 7
+              compress
+              missingok
+              sharedscripts
+              nodateext
+              postrotate
+                kill -USR1 $(cat /data/mongod.lock)
+              endscript
+            }
+            EOF
+
+            # Install mongodb
+            yum -y install mongodb-org
+            # Reset file ownership
+            chown mongod:mongod /data /journal /log
+
+            # Update MongoDB config
+            #Log
+            sed -i 's/ logAppend:/#logAppend:/' /etc/mongod.conf
+            sed -i 's/^systemLog:.*/a logAppend: true/' /etc/mongod.conf
+            sed -i 's/ logRotate:/#logRotate:/' /etc/mongod.conf
+            sed -i 's/^systemLog:.*/a logRotate: reopen/' /etc/mongod.conf
+            sed -i 's/ path:/#path:/' /etc/mongod.conf
+            sed -i 's/^systemLog:.*/a path: /log/mongod.log/' /etc/mongod.conf
+            #Storage
+            sed -i 's/ dbPath:/#dbPath:/' /etc/mongod.conf
+            sed -i 's/^storage:.*/a dbPath: \/data/' /etc/mongod.conf
+            #IP Bind
+            sed -i 's/ bindIp:/#bindIp:/' /etc/mongod.conf
+            sed -i 's/^net:.*/a bindIpAll: true/' /etc/mongod.conf
+            #set replSet
+            sed -i 's/ replSet:/#replSet:/' /etc/mongod.conf
+            sed -i "s/^replSet:.*/a replSet: ${replicaSetName}" /etc/mongod.conf
+            systemctl restart mongod
+
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal --exit-code $?  --stack  ${AWS::StackName} \
+                                    --resource EC2Instance  --region ${AWS::Region}
+
+          - mongodbVersion: !Ref mongodbVersion
+            dataDevice: !FindInMap [DeviceName, DataVol, Device]
+            logDevice: !FindInMap [DeviceName, LogVol, Device]
+            journalDevice: !FindInMap [DeviceName, JournalVol, Device]
+            replicaSetName: !Ref replicaSetName
+
+        # End Userdata
+
+  EC2Instance2:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref SSHKeyName
+      ImageId: !FindInMap [AWSRegionAMiID, !Ref 'AWS::Region', 'amiID']
+      InstanceInitiatedShutdownBehavior: stop
+      Tenancy: default
+      BlockDeviceMappings:
+        - DeviceName: !FindInMap [DeviceName, RootVol, Device]
+          Ebs:
+            VolumeSize: !If [RootVolSize, !Ref RootVolumeSize, !FindInMap [DeviceName, RootVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, RootVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+        - DeviceName: !FindInMap [DeviceName, DataVol, Device] # Root Vol
+          Ebs:
+            VolumeSize: !If [DataVolSize, !Ref RootVolumeSize, !FindInMap [DeviceName, DataVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, DataVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+        - DeviceName: !FindInMap [DeviceName, LogVol, Device]
+          Ebs:
+            VolumeSize: !If [LogVolSize, !Ref LogVolumeSize, !FindInMap [DeviceName, LogVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, LogVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+        - DeviceName: !FindInMap [DeviceName, JournalVol, Device] # Root Vol
+          Ebs:
+            VolumeSize: !If [JournalVolSize, !Ref RootVolumeSize, !FindInMap [DeviceName, JournalVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, JournalVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+      SecurityGroupIds: !Ref MongoDBSecurityGroup
+      SubnetId: !Ref SubnetID
+      Tags:
+        - Key: Name
+          Value: !Ref InstanceName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Description
+          Value: !Ref InstanceDescription
+        - Key: Owner
+          Value: !Ref InstanceOwner
+        - Key: Application
+          Value: !Ref InstanceApplication
+        - Key: AlwaysOn
+          Value: !Ref InstanceAlwaysOn
+        - Key: Lifecycle
+          Value: !Ref InstanceLifecycle
+      UserData:
+        Fn::Base64:
+          !Sub
+          - |
+            #!/bin/bash -xe
+
+            # Update OS
+            #yum update -y
+            #yum update -y aws-cfn-bootstrap
+
+            # Add mongodb repo and install mongodb
+            cat <<EOF>/etc/yum.repos.d/mongodb_repo.repo
+            [mongodb-org-${mongodbVersion}]
+            name=MongoDB Repository
+            baseurl=https://repo.mongodb.org/yum/amazon/2013.03/mongodb-org/${mongodbVersion}/x86_64/
+            gpgcheck=1
+            enabled=1
+            gpgkey=https://www.mongodb.org/static/pgp/server-${mongodbVersion}.asc
+            EOF
+            #
+            yum repolist
+
+            # Format disks
+            mkfs.xfs -L mongodata ${dataDevice}
+            mkfs.xfs -L mongojournal ${logDevice}
+            mkfs.xfs -L mongolog ${journalDevice}
+            # create required directories
+            mkdir /data /journal /log
+            # Add entry in fstab for mount
+            cat <<EOF>>/etc/fstab
+            # MongoDB FSs
+            ${dataDevice}    /data     xfs  defaults,auto,noatime,noexec  0 0
+            ${logDevice}     /log      xfs  defaults,auto,noatime,noexec  0 0
+            ${journalDevice} /journal  xfs  defaults,auto,noatime,noexec  0 0
+            EOF
+
+            # Mount FS
+            mount -a
+            # Create symlink for journal
+            ln -s /journal /data/journal
+
+            # limits
+            cat <<EOF>>/etc/security/limits.conf
+            * soft nofile 64000
+            * hard nofile 64000
+            * soft nproc 32000
+            * hard nproc 32000
+            EOF
+
+            # 90-nproc.conf
+            cat <<EOF>>/etc/security/limits.d/90-nproc.conf
+            * soft nproc 32000
+            * hard nproc 32000
+            EOF
+
+            # Disable Transparent Huge Pages
+
+            # Setup Log Rotation
+            cat <<EOF>>/etc/logrotate.d/mongodb
+            /log/mongod.log {
+              daily
+              rotate 7
+              compress
+              missingok
+              sharedscripts
+              nodateext
+              postrotate
+                kill -USR1 $(cat /data/mongod.lock)
+              endscript
+            }
+            EOF
+
+            # Install mongodb
+            yum -y install mongodb-org
+            # Reset file ownership
+            chown mongod:mongod /data /journal /log
+
+            # Update MongoDB config
+            #Log
+            sed -i 's/ logAppend:/#logAppend:/' /etc/mongod.conf
+            sed -i 's/^systemLog:.*/a logAppend: true/' /etc/mongod.conf
+            sed -i 's/ logRotate:/#logRotate:/' /etc/mongod.conf
+            sed -i 's/^systemLog:.*/a logRotate: reopen/' /etc/mongod.conf
+            sed -i 's/ path:/#path:/' /etc/mongod.conf
+            sed -i 's/^systemLog:.*/a path: /log/mongod.log/' /etc/mongod.conf
+            #Storage
+            sed -i 's/ dbPath:/#dbPath:/' /etc/mongod.conf
+            sed -i 's/^storage:.*/a dbPath: \/data/' /etc/mongod.conf
+            #IP Bind
+            sed -i 's/ bindIp:/#bindIp:/' /etc/mongod.conf
+            sed -i 's/^net:.*/a bindIpAll: true/' /etc/mongod.conf
+            #set replSet
+            sed -i 's/ replSet:/#replSet:/' /etc/mongod.conf
+            sed -i "s/^replSet:.*/a replSet: ${replicaSetName}" /etc/mongod.conf
+            systemctl restart mongod
+
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal --exit-code $?  --stack  ${AWS::StackName} \
+                                    --resource EC2Instance  --region ${AWS::Region}
+
+          - mongodbVersion: !Ref mongodbVersion
+            dataDevice: !FindInMap [DeviceName, DataVol, Device]
+            logDevice: !FindInMap [DeviceName, LogVol, Device]
+            journalDevice: !FindInMap [DeviceName, JournalVol, Device]
+            replicaSetName: !Ref replicaSetName
+
+        # End Userdata
+
+  EC2Instance3:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref SSHKeyName
+      ImageId: !FindInMap [AWSRegionAMiID, !Ref 'AWS::Region', 'amiID']
+      InstanceInitiatedShutdownBehavior: stop
+      Tenancy: default
+      BlockDeviceMappings:
+        - DeviceName: !FindInMap [DeviceName, RootVol, Device]
+          Ebs:
+            VolumeSize: !If [RootVolSize, !Ref RootVolumeSize, !FindInMap [DeviceName, RootVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, RootVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+        - DeviceName: !FindInMap [DeviceName, DataVol, Device] # Root Vol
+          Ebs:
+            VolumeSize: !If [DataVolSize, !Ref RootVolumeSize, !FindInMap [DeviceName, DataVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, DataVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+        - DeviceName: !FindInMap [DeviceName, LogVol, Device]
+          Ebs:
+            VolumeSize: !If [LogVolSize, !Ref LogVolumeSize, !FindInMap [DeviceName, LogVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, LogVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+        - DeviceName: !FindInMap [DeviceName, JournalVol, Device] # Root Vol
+          Ebs:
+            VolumeSize: !If [JournalVolSize, !Ref RootVolumeSize, !FindInMap [DeviceName, JournalVol, Size] ]
+            VolumeType: !FindInMap [DeviceName, JournalVol, Type]
+            DeleteOnTermination: true
+            Encrypted: !Ref VolEncryption
+            KmsKeyId: !Ref VolEncrKMSID
+      SecurityGroupIds: !Ref MongoDBSecurityGroup
+      SubnetId: !Ref SubnetID
+      Tags:
+        - Key: Name
+          Value: !Ref InstanceName
+        - Key: Environment
+          Value: !Ref EnvironmentName
+        - Key: Description
+          Value: !Ref InstanceDescription
+        - Key: Owner
+          Value: !Ref InstanceOwner
+        - Key: Application
+          Value: !Ref InstanceApplication
+        - Key: AlwaysOn
+          Value: !Ref InstanceAlwaysOn
+        - Key: Lifecycle
+          Value: !Ref InstanceLifecycle
+      UserData:
+        Fn::Base64:
+          !Sub
+          - |
+            #!/bin/bash -xe
+
+            # Update OS
+            #yum update -y
+            #yum update -y aws-cfn-bootstrap
+
+            # Add mongodb repo and install mongodb
+            cat <<EOF>/etc/yum.repos.d/mongodb_repo.repo
+            [mongodb-org-${mongodbVersion}]
+            name=MongoDB Repository
+            baseurl=https://repo.mongodb.org/yum/amazon/2013.03/mongodb-org/${mongodbVersion}/x86_64/
+            gpgcheck=1
+            enabled=1
+            gpgkey=https://www.mongodb.org/static/pgp/server-${mongodbVersion}.asc
+            EOF
+            #
+            yum repolist
+
+            # Format disks
+            mkfs.xfs -L mongodata ${dataDevice}
+            mkfs.xfs -L mongojournal ${logDevice}
+            mkfs.xfs -L mongolog ${journalDevice}
+            # create required directories
+            mkdir /data /journal /log
+            # Add entry in fstab for mount
+            cat <<EOF>>/etc/fstab
+            # MongoDB FSs
+            ${dataDevice}    /data     xfs  defaults,auto,noatime,noexec  0 0
+            ${logDevice}     /log      xfs  defaults,auto,noatime,noexec  0 0
+            ${journalDevice} /journal  xfs  defaults,auto,noatime,noexec  0 0
+            EOF
+
+            # Mount FS
+            mount -a
+            # Create symlink for journal
+            ln -s /journal /data/journal
+
+            # limits
+            cat <<EOF>>/etc/security/limits.conf
+            * soft nofile 64000
+            * hard nofile 64000
+            * soft nproc 32000
+            * hard nproc 32000
+            EOF
+
+            # 90-nproc.conf
+            cat <<EOF>>/etc/security/limits.d/90-nproc.conf
+            * soft nproc 32000
+            * hard nproc 32000
+            EOF
+
+            # Disable Transparent Huge Pages
+
+            # Setup Log Rotation
+            cat <<EOF>>/etc/logrotate.d/mongodb
+            /log/mongod.log {
+              daily
+              rotate 7
+              compress
+              missingok
+              sharedscripts
+              nodateext
+              postrotate
+                kill -USR1 $(cat /data/mongod.lock)
+              endscript
+            }
+            EOF
+
+            # Install mongodb
+            yum -y install mongodb-org
+            # Reset file ownership
+            chown mongod:mongod /data /journal /log
+
+            # Update MongoDB config
+            #Log
+            sed -i 's/ logAppend:/#logAppend:/' /etc/mongod.conf
+            sed -i 's/^systemLog:.*/a logAppend: true/' /etc/mongod.conf
+            sed -i 's/ logRotate:/#logRotate:/' /etc/mongod.conf
+            sed -i 's/^systemLog:.*/a logRotate: reopen/' /etc/mongod.conf
+            sed -i 's/ path:/#path:/' /etc/mongod.conf
+            sed -i 's/^systemLog:.*/a path: /log/mongod.log/' /etc/mongod.conf
+            #Storage
+            sed -i 's/ dbPath:/#dbPath:/' /etc/mongod.conf
+            sed -i 's/^storage:.*/a dbPath: \/data/' /etc/mongod.conf
+            #IP Bind
+            sed -i 's/ bindIp:/#bindIp:/' /etc/mongod.conf
+            sed -i 's/^net:.*/a bindIpAll: true/' /etc/mongod.conf
+            #set replSet
+            sed -i 's/ replSet:/#replSet:/' /etc/mongod.conf
+            sed -i "s/^replSet:.*/a replSet: ${replicaSetName}" /etc/mongod.conf
+            systemctl restart mongod
+
+            # initiate replication
+            mongo <<EOL
+            rs.status()
+            rs.initiate()
+            rs.add("${mongoDBSrv1PriIP}:PORT")
+            rs.add("${mongoDBSrv2PriIP}:PORT")
+            rs.status()
+            EOL
+
+            # Signal the status from cfn-init
+            /opt/aws/bin/cfn-signal --exit-code $?  --stack  ${AWS::StackName} \
+                                    --resource EC2Instance  --region ${AWS::Region}
+
+          - mongodbVersion: !Ref mongodbVersion
+            dataDevice: !FindInMap [DeviceName, DataVol, Device]
+            logDevice: !FindInMap [DeviceName, LogVol, Device]
+            journalDevice: !FindInMap [DeviceName, JournalVol, Device]
+            replicaSetName: !Ref replicaSetName
+            mongoDBSrv1PriIP: !GetAtt [EC2Instance1, PrivateIp]
+            mongoDBSrv2PriIP: !GetAtt [EC2Instance2, PrivateIp]
+
+        # End Userdata
+# Output
+Outputs:
+  EC2InstanceID1:
+    Description: Instance-ID of the newly created MongoDB EC2 instance 1
+    Value: !Ref EC2Instance1
+  EC2InstanceID1_PrivateIP:
+    Description: Private-IP of the newly created MongoDB EC2 instance 1
+    Value: !GetAtt [EC2Instance1, PrivateIp]
+
+  EC2InstanceID2:
+    Description: Instance-ID of the newly created MongoDB EC2 instance 2
+    Value: !Ref EC2Instance2
+  EC2InstanceID2_PrivateIP:
+    Description: Private-IP of the newly created MongoDB EC2 instance 2
+    Value: !GetAtt [EC2Instance2, PrivateIp]
+
+  EC2InstanceID3:
+    Description: Instance-ID of the newly created MongoDB EC2 instance 3
+    Value: !Ref EC2Instance3
+  EC2InstanceID3_PrivateIP:
+    Description: Private-IP of the newly created MongoDB EC2 instance 3
+    Value: !GetAtt [EC2Instance3, PrivateIp]
+
+## END
