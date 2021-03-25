@@ -30,7 +30,8 @@
                             echo -e "${result}" | tee -a $REPORT_CSV_FILE
                         """
                       }
-                  } // if ..else closed
-                } // dir closed
+                    } // if ..else closed
+                  } // dir closed
+                }            
             }
         }
