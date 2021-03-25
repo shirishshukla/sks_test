@@ -1,0 +1,36 @@
+        // Parallel when serial has no failure
+        stage("Parallel Deployments") {
+            when {
+                  expression { SERVICESCOUNT > 0 && PSCOUNT > 0}
+            }
+            steps {
+                script {
+                  dir(env.WORKSPACE) {
+                    def parallelPropFile = readFile file: ParallelServicesPropFile
+                    def parallel_services_list = parallelPropFile.readLines()
+                    if(DEPLOY_RESULT_STATUS) {                    
+                        def deployType = 'parallel'
+                        def parallelJobSet20 = parallel_services_list.collate(env.parallelJobThread)
+                        parallelJobSet20.each { parallel_services_list_20 ->
+                            def deployResult = deployFromProps(parallel_services_list_20, deployType, agentName)
+                        }
+                        if (!deployResult ) {
+                            DEPLOY_RESULT_STATUS = false
+                            println('Some Parallel Jobs are Failed')
+                        } else{
+                            println('All Parallel Jobs are Success')
+                        }
+                    } else {
+                      parallel_services_list.each { SERVICE ->
+                        def artifactID = SERVICE.tokenize('=')[0].trim()
+                        def version = SERVICE.tokenize('=')[1].trim()
+                        def result = artifactID + ', ' +  version + ', ' + 'NA' + ', ' + '<font color=orange>SKIPPED</font>'
+                        sh """
+                            result='''+result+'''
+                            echo -e "${result}" | tee -a $REPORT_CSV_FILE
+                        """
+                      }
+                  } // if ..else closed
+                } // dir closed
+            }
+        }
