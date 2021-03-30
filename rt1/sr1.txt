@@ -1,34 +1,5 @@
-        stage("Serial Deployments") {
-            when {
-                expression { SERVICESCOUNT > 0 && SERIALSERVICECOUNT > 0 }
-            }
-            steps {
-                script {
-                    dir(env.WORKSPACE) {
-                        def deployType = 'serial'
-                        def serialPropFile = readFile file: SerialServicesPropFile // new list
-                        def serial_services_list = serialPropFile.readLines() // serial service list to process
-
-                        # make serial_services_list in same order is SerialServicesListFile
-                        def serialServicesList = readFile file: SerialServicesListFile // org list
-                        serialServicesList = serialServicesList.readLines()
-                        def finalOrderedSerialServiceList = []
-                        serialServicesList.each { SVC ->
-                            println(SER)
-                            def matchedEntry = serial_services_list.findAll { it.contains(SVC.tokenize('=')[0].trim()) }
-                            if(matchedEntry) {
-                                finalOrderedSerialServiceList.add(matchedEntry[0])
-                            }
-                        }
-                        #
-
-                        def deployResult = deployFromProps(finalOrderedSerialServiceList, deployType, agentName)
-                        sleep time_wait.toInteger()
-                        if (!deployResult ) {
-                            DEPLOY_RESULT_STATUS = false
-                            println('Serial job failed,so Parallel jobs will be skipped')
-                        }
-                    }
-                }
-            }
-        }
+                   println("!! Deployment Completed !!")
+                   totalSuccess = sh (script:"grep -cw SUCCESS ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
+                   totalFailure = sh (script:"grep -cw FAILURE ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
+                   totalSkipped = sh (script:"grep -cw SKIPPED ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
+                   println('Total Success Jobs: ' + totalSuccess + '\n' + 'Total Failed Jobs: ' + totalFailure + '\n' + 'Total Skipped Jobs: ' + totalSkipped + '\n')
