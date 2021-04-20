@@ -1,0 +1,8 @@
+- name: Set permissions
+  shell: |
+    test -d  {{ item.key }} && chown -R {{ item.value }}:{{ item.value }} {{ item.key }} || true
+  with_dict:
+   - /appvol: root
+   - /appvol/dspbackup: root
+   - /opt/mdw: opendj
+   - /opt/opendj: opendj
