@@ -1,29 +1,549 @@
-                def CMD = '''
-                  > ${HTML_REPORT_FILE}.other
-                  report_gen() {
-                    echo "<table class=\"table1\" border=\"3\" bordercolor=\"black\">" > ${HTML_REPORT_FILE}
-                    header=true
-                    SORTVAL="FAILED"
-                    cnt=1
-                    while read LINE; do
-                      if $header;then
-                          echo "<tr><th>No.</th><th>${LINE//,/</th><th>}</th></tr>" >> ${HTML_REPORT_FILE}
-                          header=false
-                      else
-                          if echo $LINE | awk '{print $NF}' | grep FAILED ; then 
-                              echo "<tr><td>$cnt</td><td>${LINE//,/</td><td>}</td></tr>" >> ${HTML_REPORT_FILE}
-                              ((cnt++))
-                          else 
-                              echo "$LINE" >> ${REPORT_CSV_FILE}.other                              
-                          fi
-                      fi
-                    done < ${REPORT_CSV_FILE}
-                    
-                    while read LINE; do
-                        echo "<tr><td>$cnt</td><td>${LINE//,/</td><td>}</td></tr>" >> ${HTML_REPORT_FILE}
-                        ((cnt++))
-                    done < ${REPORT_CSV_FILE}.other
-                    echo "</table>" >> ${HTML_REPORT_FILE}                    
-                  }
-                  report_gen 
-                '''
+#!/usr/bin/groovy
+
+def agentName="SPRx2.0_DEPLOY-ONLY"
+def serialServicesRefFile="SERIAL_SERVICES_LIST.txt"
+def serialServicesPropFile="SERIAL_SERVICES.properties"
+def parallelServicesPropFile="PARALLEL_SERVICES.properties"
+def ignoreServicesPropFile="IGNORE_SERVICES.properties"
+def prodSchParallelServiceFile="PROD_SCHEDULER_SERVICES.properties"
+
+//Get email DL
+def getEMail_DL(def emailTo, def emailDLPropsFile){
+    emailDLProperties=readProperties file: emailDLPropsFile
+    emailDL=emailDLProperties.get(emailTo)
+    emailDL
+}
+
+// Run shell command in non-debug mode
+def runShellCmd(cmd) {
+    steps.sh (script: '#!/bin/sh -e\n'+ cmd,returnStdout: true)
+}
+
+// Get number of lines in serial,parallel,NA files
+int getLineCountInfile(def fileType) {
+    dir(env.WORKSPACE){
+       fileExist=sh (script:"stat -c%F $fileType || true >/dev/null 2>&1", returnStdout: true)
+       if(fileExist){
+        def servicesFile=readFile file: fileType
+        def fileLines=servicesFile.readLines()
+        count=fileLines.size()
+      } else {
+        count=0
+      }
+      return count
+     }
+}
+
+// Get Services list from serial,parallel,NA file
+def serviceListReport(def deployType, def propsFile){
+    def lineCount=getLineCountInfile(propsFile)
+    def services= 'no-service-matched'
+    def servicesCount=0
+
+    if(lineCount > 0){
+        propsFile=readFile file: propsFile
+        services=propsFile.readLines()
+        servicesCount=services.size()
+        println("Deploy Type: "+ deployType + "\nServices: \n" + services.join(',').replace(',', '\n') + '\nNumber of services: '+ servicesCount )
+    }
+}
+
+// Deployment of each service
+def deployFromProps(def services, deployType, agent){
+    def index=0
+    boolean buildStatus=true
+    def applDeployJobsArray=[:]
+    def Map modules=[:]
+    def servicesCount=services.size()
+
+    println("Deploy Type: "+ deployType + "\nServices: \n" + services.join(',').replace(',', '\n') + '\nNumber of services: '+ servicesCount )
+
+    if (servicesCount > 0) {
+        services.each { SERVICE ->
+            modules.runjob=load "runJob.groovy"
+            if (deployType == 'serial') {
+                buildStatus=modules.runjob.runBuild(SERVICE, buildStatus, deployType, agent)
+                sleep time_wait.toInteger()
+            }
+            if(deployType == 'parallel') {
+                applDeployJobsArray["${index}"]= {
+                    buildStatus=modules.runjob.runBuild(SERVICE, buildStatus, deployType, agent)
+                }
+            }
+            index++
+        } // End Loop
+
+        if(deployType == 'parallel') {
+            parallel applDeployJobsArray
+        }
+    }
+    return buildStatus
+}
+
+// Pipeline
+pipeline{
+
+    agent{
+        label agentName
+    }
+
+    environment{
+        REPORT_CSV_FILE="${env.WORKSPACE}/report.csv"
+        HTML_REPORT_FILE="${env.WORKSPACE}/report.html"
+        time_wait="${env.SLEEP_TIME_BTWN_SERVICES_SERIAL}" // wait for seconds between builds
+        wait_time="${env.SLEEP_TIME_BTWN_PARLLEL_SETS}" //wait for seconds between each parallel sets
+        credentialId= '3e38e78b-df56-4861-95f1-f084e03f93f5'
+        FAILED_REPORT_FILE="${env.WORKSPACE}/FAILED_REPORT.properties"
+        EMAIL_REPORT_HEADER="${ENVIRONMENT} : SERIAL-PARALLEL DEPLOYMENTS COMMUNICATION"
+        NOTIFY_SUBJECT="Serial-Parallel Deployments"
+        EMAIL_TO="${EMAILTO}"
+        emailDLPropertiesFile="E-MAIL_DL_SUCCESS.properties"
+        servicesCount=0
+        ReportSize=0
+        boolean NOTIFIED=false
+        boolean DEPLOY_RESULT_STATUS=true
+        boolean EMAIL_NOTIFICATION=true
+    }
+
+    stages{
+
+        // Clean  WORKSPACE
+        stage("Clean WS") {
+            steps{
+                step([$class: 'WsCleanup'])
+            }
+        }
+
+        // Checkout GIT REPO
+        stage("Checkout") {
+            steps{
+                checkout scm
+            }
+        }
+
+        stage("Initialization"){
+            steps{
+                script{
+                    SUCCESS_EMAIL_LIST=getEMail_DL(EMAIL_TO, emailDLPropertiesFile)
+                }
+            }
+        }
+
+        // Validate all properties file
+        stage("Validate PropFile") {
+            steps {
+              script {
+                  def confFile='env-jobs.properties'
+                  confPropFile=readProperties file: confFile
+
+                  env.JOB_PATH=confPropFile."${ENVIRONMENT}_JOBS"
+                  env.PROP_GIT_REPO=confPropFile.'DEFAULT_SERVICE_GIT_REPO'
+                  env.PROP_GIT_BRANCH="${ENVIRONMENT}"
+                  env.PROP_GIT_CO_DIR='services_prop_git_repo'
+                  env.INPUT_SERVICES_PROP_FILE='INPUT_SERVICES.properties'
+
+                  println("Job Path: " + JOB_PATH)
+                  println("Environment: " + ENVIRONMENT)
+                  println("PROP GIT REPO: " + PROP_GIT_REPO)
+                  println("PROP GIT BRANCH: " + PROP_GIT_BRANCH)
+
+                    // Checkout Prop files repo
+                    checkout([
+                           $class: 'GitSCM',
+                           branches: [[name: "${env.PROP_GIT_BRANCH}"]],
+                           extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: "${env.PROP_GIT_CO_DIR}"]],
+                           userRemoteConfigs: [[credentialsId: "${env.credentialId}", url: "${env.PROP_GIT_REPO}" ]]
+                    ])
+
+                    def inputServicesPropFile=env.PROP_GIT_CO_DIR + '/' + env.INPUT_SERVICES_PROP_FILE
+
+                    def serialServicesList=readFile file: serialServicesRefFile
+                    serialServicesList=serialServicesList.readLines()
+
+                    def inputpropFile=readFile file: inputServicesPropFile
+                    def inputServicesList=inputpropFile.readLines()
+
+                    servicesCount=inputServicesList.size()
+
+                    if(servicesCount>0){
+
+                        // Excluded Services
+                        excludeServicesList=EXCLUDE_SERVICES.split()
+                        println("Exclude Services List:"+excludeServicesList)
+                        if(excludeServicesList.length > 0){
+                            //initialize Excluded Services List File
+                            inputServicesPropFileNew='inputServicesListFinal.properties'
+                            sh ">$inputServicesPropFileNew"
+                            //filter our excluded services from main list
+                            inputServicesList.each{ SERVICE ->
+                               excludeServiceFound=excludeServicesList.findAll {it.contains(SERVICE.tokenize('=')[0].trim()) }
+                               if(!excludeServiceFound){
+                                   runShellCmd("echo $SERVICE >> $inputServicesPropFileNew")
+                               }
+                            }
+                            inputpropFile=readFile file: inputServicesPropFileNew
+                            inputServicesList=inputpropFile.readLines()
+                            finalServiceList=inputServicesPropFileNew
+                        }
+
+                        // If env is prod get prod scheduler service list from git repo
+                        if (ENVIRONMENT == 'prod-test') {
+                            env.PROD_SCH_GIT_REPO='https://gitw.cvshealth.com/SpecialtyRx/sprx2.0_infra_test.git'
+                            env.PROD_SCH_GIT_BRANCH="${ENVIRONMENT}"
+                            env.PROD_SCH_PROP_FILE='Schedulers-Services.txt'
+                            env.PROD_SCH_GIT_CO_DIR='prod_sch_services'
+
+                            // Checkout Prop files repo
+                            checkout([
+                                   $class: 'GitSCM',
+                                   branches: [[name: "${env.PROD_SCH_GIT_BRANCH}"]],
+                                   extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: "${env.PROD_SCH_GIT_CO_DIR}"]],
+                                   userRemoteConfigs: [[credentialsId: "${env.credentialId}", url: "${env.PROD_SCH_GIT_REPO}" ]]
+                            ])
+
+                            def prodSchServiceFile = env.PROD_SCH_GIT_CO_DIR + '/' + env.PROD_SCH_PROP_FILE
+
+                            prodSchServicesList=readFile file: prodSchServiceFile
+                            prodSchServicesList=prodSchServicesList.readLines()
+                        } else {
+                            prodSchServicesList=[]
+                        }
+
+                        println(prodSchServicesList)
+
+                        sh """
+                            touch $ignoreServicesPropFile $serialServicesPropFile $parallelServicesPropFile $prodSchParallelServiceFile
+                        """
+                        inputServicesList.each { SERVICE ->
+
+                            def serialServiceMatched=serialServicesList.findAll { it.contains(SERVICE.tokenize('=')[0].trim()) }
+                            def prodSchServiceMatched=prodSchServicesList.findAll { it.contains(SERVICE.tokenize('=')[0].trim()) }
+
+                            if(SERVICE.tokenize('=')[-1].trim() == 'NA') {
+                                runShellCmd("echo $SERVICE >> $ignoreServicesPropFile")
+                            } else if(prodSchServicesList.size() > 0 && prodSchServiceMatched) {
+                                runShellCmd("echo $SERVICE >> $prodSchParallelServiceFile")
+                            } else if(serialServiceMatched) {
+                                runShellCmd("echo $SERVICE >> $serialServicesPropFile")
+                            } else {
+                                runShellCmd("echo $SERVICE >> $parallelServicesPropFile")
+                            }
+                        }
+                        TotalServices=getLineCountInfile(inputpropFile)
+                        serialServiceCount=getLineCountInfile(serialServicesPropFile)
+                        parallelServiceCount=getLineCountInfile(parallelServicesPropFile)
+                        NACount=getLineCountInfile(ignoreServicesPropFile)
+                        prodSchParallelServiceCount=getLineCountInfile(prodSchParallelServiceFile)
+                        println('Services Serial: ' + serialServiceCount +', Parallel: ' + parallelServiceCount + ', NA:' + NACount + ', Prod Scheduler: ' + prodSchParallelServiceCount)
+                    }
+              }
+            }
+        }
+
+        // Preperation, adding header to the CSV file
+        stage("Report Prepration") {
+                when {
+                    expression { servicesCount > 0 }
+                }
+            steps{
+                script {
+                    def ReportHeader='ServiceName, Version, JenkinsBuildConsoleOutputURL, BuildResult'
+                    runShellCmd("echo $ReportHeader > $REPORT_CSV_FILE")
+                }
+            }
+        }
+       //Ordering the Serial services list and Deploying
+        stage("Serial Deployments") {
+            when {
+                expression { serialServiceCount > 0 }
+            }
+            steps {
+                script {
+                    dir(env.WORKSPACE) {
+                        def deployType='serial'
+                        def serialPropFile=readFile file: serialServicesPropFile
+                        def serial_services_list=serialPropFile.readLines()
+                        def serialServicesList=readFile file: serialServicesRefFile
+                        serialServicesList=serialServicesList.readLines()
+                        def finalOrderedSerialServiceList=[]
+                        serialServicesList.each { SVC ->
+                            def matchedEntry=serial_services_list.findAll { it.contains(SVC.tokenize('=')[0].trim()) }
+                            if(matchedEntry) {
+                                finalOrderedSerialServiceList.add(matchedEntry[0])
+                            }
+                        }
+
+                        def deployResult=deployFromProps(finalOrderedSerialServiceList, deployType, agentName)
+                        if (!deployResult ) {
+                            DEPLOY_RESULT_STATUS=false
+                            println('Serial job failed,so Parallel jobs will be skipped')
+                        }
+                    }
+                }
+            }
+        }
+
+        // Deploy Parallel Services when serial has no failure
+        stage("Parallel Deployments") {
+            when {
+                expression { parallelServiceCount > 0 }
+            }
+            steps {
+                script {
+                    dir(env.WORKSPACE) {
+                        def parallelPropFile=readFile file: parallelServicesPropFile
+                        def parallel_services_list=parallelPropFile.readLines()
+                        if(DEPLOY_RESULT_STATUS) {
+                            def deployType='parallel'
+                            def parallelJobSet=parallel_services_list.collate(env.NUMBER_OF_JOBS_PRLL.toInteger())
+                            parallelJobSet.each { parallel_services_list_input ->
+                              def deployResult=deployFromProps(parallel_services_list_input, deployType, agentName)
+                              sleep wait_time.toInteger()
+                              if (!deployResult) {
+                                DEPLOY_RESULT_STATUS=false
+                                println('Some Parallel Jobs Failed')
+                              } else{
+                                 println('Parallel set Jobs are Successful')
+                              }
+                            }
+                        } else {
+                            parallel_services_list.each { SERVICE ->
+                               def artifactID=SERVICE.tokenize('=')[0].trim()
+                               def version=SERVICE.tokenize('=')[1].trim()
+                               def result=artifactID + ', ' + '<p align=left style=font-size:12px>' + version + ', ' + 'NA' + ', ' + '<font color=orange>SKIPPED</font>'
+                               def CMD="""
+                                 result='''+result+'''
+                                 echo -e "${result}" | tee -a $REPORT_CSV_FILE
+                               """
+                               runShellCmd(CMD)
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // Prod Parallel
+
+        // Generate HTML Report File
+        stage("Generate HTML Report File") {
+            when {
+                expression { servicesCount > 0 }
+            }
+            steps{
+                dir(env.WORKSPACE) {
+                    script {
+                        // Validate csv file
+                        def reportSize=readFile file: REPORT_CSV_FILE
+                        ReportSize=reportSize.readLines().size()
+                        if (ReportSize > 0) {
+                            runShellCmd("cat ${REPORT_CSV_FILE}")
+                        } else {
+                            println('Result is null no SERVICES')
+                        }
+
+                        def CMD = '''
+                          > ${HTML_REPORT_FILE}.other
+                            report_gen() {
+                              echo "<table class=\"table1\" border=\"3\" bordercolor=\"black\">" > ${HTML_REPORT_FILE}
+                              header=true
+                              SORTVAL="FAILED"
+                              cnt=1
+                              while read LINE; do
+                                if $header;then
+                                echo "<tr><th>SNo.</th><th>${LINE//,/</th><th>}</th></tr>" >> ${HTML_REPORT_FILE}
+                                header=false
+                              else
+                                if echo $LINE | awk '{print $NF}' | grep FAILURE ; then
+                                   echo "<tr><td>$cnt</td><td>${LINE//,/</td><td>}</td></tr>" >> ${HTML_REPORT_FILE}
+                                   ((cnt++))
+                                else
+                                   echo "$LINE" >> ${REPORT_CSV_FILE}.other
+                                fi
+                              fi
+                              done < ${REPORT_CSV_FILE}
+
+                              while read LINE; do
+                                echo "<tr><td>$cnt</td><td>${LINE//,/</td><td>}</td></tr>" >> ${HTML_REPORT_FILE}
+                                ((cnt++))
+                              done < ${REPORT_CSV_FILE}.other
+                              echo "</table>" >> ${HTML_REPORT_FILE}
+                              }
+                              report_gen
+                              '''
+                        runShellCmd(CMD)
+                      }
+                }
+            }
+        }
+
+        // Sent email Notification
+        stage("Notification") {
+            steps {
+                script {
+                      REPORT_HEADER_HTML="""
+                        <html>
+                          <style>
+                          pre, ul, li, body {
+                                        font-family: 'Calibri';
+                                        font-size: 12px;
+                                }
+                          .par {
+                                  font-family: 'Calibri';
+                                  font-size: 12px;
+                              }
+                          .title {
+                                        font-family: 'Rockwell Extra Bold';
+                                        font-size: 20px;
+                                        color:red;
+                                        background-color: gold;
+                                        text-align: center;
+                                  }
+                          .foot {
+                                        font-family: 'Calibri';
+                                        font-size: 15px;
+                                        color:black;
+                                        background-color: #ffad99;
+                                        text-align: center;
+                                 }
+                          .foot1 {
+                                        font-family: 'Calibri';
+                                        font-size: 18px;
+                                        color:black;
+                                        background-color: lightblue;
+                                        text-align: center;
+                                 }
+                      <!--  Table 1: Style  Start here -->
+                          table {
+                                        width: 100%;
+                                        text-align: center;
+                                        border-collapse: collapse;
+                                 }
+                              th {
+                                        padding: 10px 5px;
+                                        font-family: 'Calibri';
+                                        border: 1px solid #fff23df;
+                                 }
+                              td {
+                                        padding: 5px 10px;
+                                        border-collapse: collapse;
+                                        text-align: center;
+                                        font-family: 'Calibri';
+                                        font-size: 14px;
+                                 }
+                       tbody, td {
+                                        background: #D0E4F5;
+                                 }
+                       thead, th {
+                                        font-size: 16px;
+                                        font-weight: bold;
+                                        color: #AED6F1;
+                                        background: #1C6EA4;
+                                        background: -moz-linear-gradient(top, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                        background: -webkit-linear-gradient(top, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                        background: linear-gradient(to bottom, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
+                                 }
+                         </style>
+                         <body>
+                     """
+
+                      REPORT_FOOTER="""
+                           </ul>
+                           <br></br>
+                           <p class='foot1'>[ This is an auto generated email, please do not reply. If you have any queries, please email to <a href='mailto:specialty_platform_engg@CVSHealth.com?subject=${NOTIFY_SUBJECT}'>Platform Engg</a> ]</p>
+                           </body>
+                           </html>
+                      """
+
+                      // Report have data
+                      if(servicesCount > 0) {
+
+                          REPORT_HEADER='<h2 style="text-align:center"><font style="background-color:lightblue;color:black">' + "${EMAIL_REPORT_HEADER}" + '</font></h2>'
+                          REPORT_BODY=sh(script: "cat ${HTML_REPORT_FILE}", returnStdout: true).trim()
+                      }
+
+                      // Report is Blank i.e no SERVICES
+                      else {
+                        REPORT_HEADER="<h2 align='center'>SERIAL DEPLOYMENTS COMMUNICATION</h2>"
+                        REPORT_BODY="""
+                                  <h1 style="background-color:#FFC300 ;">!! No deployments planned in this window !!</h1>
+                        """
+                        //REPORT_COMMIT=""
+                        //REPORT_COMMIT_MSG=""
+                      }
+
+                      EMAIL_CONTENT=REPORT_HEADER_HTML + "<body><center>" +
+                                      REPORT_HEADER +
+                                      """
+                                        <br></br>
+                                        <ul style="color:#3B240B">
+                                      """ +
+                                      REPORT_BODY + "</center><br>" +
+                                     //REPORT_COMMIT + "<br>" +
+                                     //REPORT_COMMIT_MSG + "<br>" +
+                                      REPORT_FOOTER
+
+                } // end scripts
+          } // end steps
+      } // end stage
+    } // end stages
+
+    post{
+        success {
+            script {
+                   serviceListReport('Serial', serialServicesPropFile)
+                   serviceListReport('Parallel', parallelServicesPropFile)
+                   serviceListReport('Ignore', ignoreServicesPropFile)
+                   totalSuccess=sh (script:"grep -cw SUCCESS ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
+                   totalFailure=sh (script:"grep -cw FAILURE ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
+                   totalSkipped=sh (script:"grep -cw SKIPPED ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
+                   println('Deployment Completed with - Total Successful Jobs: ' + totalSuccess + ', ' + 'Total Failed Jobs: ' + totalFailure + ', ' + 'Total Skipped Jobs: ' + totalSkipped )
+
+                   //return final status
+                   if(!DEPLOY_RESULT_STATUS ) {
+                        if(EMAIL_NOTIFICATION ) {
+                            NOTIFY_SUBJECT='Failed : ' + "${ENVIRONMENT} -" + NOTIFY_SUBJECT
+                            emailext(
+                              attachmentsPattern: 'FAILED_REPORT.properties',
+                              mimeType: 'text/html',
+                              body: EMAIL_CONTENT,
+                              subject: NOTIFY_SUBJECT,
+                              to: SUCCESS_EMAIL_LIST
+                            )
+                            NOTIFIED=true
+                        }
+                        currentBuild.result='FAILED'
+                   } else {
+                        if(EMAIL_NOTIFICATION ) {
+                            emailext mimeType: 'text/html',
+                            body: EMAIL_CONTENT,
+                            subject: 'Success: ' + "${ENVIRONMENT} -" + NOTIFY_SUBJECT,
+                            to: SUCCESS_EMAIL_LIST
+                            NOTIFIED=true
+                       }
+                   }
+            }
+        }
+
+        failure {
+            script {
+                      println("!!!!!!!!!!!!!!!!!!!!!  FAILED  FAILED  FAILED  FAILED  FAILED  FAILED !!!!!!!!!!!!!!!!!!!!!")
+                        if(NOTIFIED  && EMAIL_NOTIFICATION && DEPLOY_RESULT_STATUS) {
+                          NOTIFY_SUBJECT=NOTIFY_SUBJECT + ": --- FAILED ---"
+                          emailext mimeType: 'text/html',
+                          body: 'DEPLOYMENT FAILED !!',
+                          subject: NOTIFY_SUBJECT,
+                          to: SUCCESS_EMAIL_LIST
+                         }
+            }
+         }
+
+        always {
+                println('Archiveingall *.properties file')
+                archiveArtifacts artifacts: '*.properties'
+        }
+     }
+}
+
+
+
