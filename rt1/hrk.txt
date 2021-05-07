@@ -1,11 +1,11 @@
 #!/usr/bin/groovy
 
 def agentName="SPRx2.0_DEPLOY-ONLY"
-def serialServicesRefFile="SERIAL_SERVICES_LIST.txt"
-def serialServicesPropFile="SERIAL_SERVICES.properties"
-def parallelServicesPropFile="PARALLEL_SERVICES.properties"
-def ignoreServicesPropFile="IGNORE_SERVICES.properties"
-def prodSchParallelServiceFile="PROD_SCHEDULER_SERVICES.properties"
+//DEL// def serialServicesRefFile="SERIAL_SERVICES_LIST.txt"
+//DEL// def serialServicesPropFile="SERIAL_SERVICES.properties"
+//DEL// def parallelServicesPropFile="PARALLEL_SERVICES.properties"
+//DEL// def ignoreServicesPropFile="IGNORE_SERVICES.properties"
+//DEL// def schParallelServiceFile="SCHEDULER_SERVICES.properties"
 
 //Get email DL
 def getEMail_DL(def emailTo, def emailDLPropsFile){
@@ -17,35 +17,22 @@ def getEMail_DL(def emailTo, def emailDLPropsFile){
 // Run shell command in non-debug mode
 def runShellCmd(cmd) {
     steps.sh (script: '#!/bin/sh -e\n'+ cmd,returnStdout: true)
-}
+  }
 
-// Get number of lines in serial,parallel,NA files
-int getLineCountInfile(def fileType) {
-    dir(env.WORKSPACE){
-       fileExist=sh (script:"stat -c%F $fileType || true >/dev/null 2>&1", returnStdout: true)
-       if(fileExist){
-        def servicesFile=readFile file: fileType
-        def fileLines=servicesFile.readLines()
-        count=fileLines.size()
-      } else {
-        count=0
-      }
-      return count
-     }
-}
-
-// Get Services list from serial,parallel,NA file
-def serviceListReport(def deployType, def propsFile){
-    def lineCount=getLineCountInfile(propsFile)
-    def services= 'no-service-matched'
-    def servicesCount=0
-
-    if(lineCount > 0){
-        propsFile=readFile file: propsFile
-        services=propsFile.readLines()
-        servicesCount=services.size()
-        println("Deploy Type: "+ deployType + "\nServices: \n" + services.join(',').replace(',', '\n') + '\nNumber of services: '+ servicesCount )
-    }
+// Prompt for user confirmation
+def userPrompt(def MSG){
+    println(MSG)
+    input(
+      message: "!! $MSG, Would you like to continue?",
+      ok: "Continue",
+      parameters: [
+        [
+          $class: 'BooleanParameterDefinition',
+          defaultValue: true,
+          name: 'Yes?',
+        ]
+      ]
+    )
 }
 
 // Deployment of each service
@@ -90,12 +77,11 @@ pipeline{
     environment{
         REPORT_CSV_FILE="${env.WORKSPACE}/report.csv"
         HTML_REPORT_FILE="${env.WORKSPACE}/report.html"
-        time_wait="${env.SLEEP_TIME_BTWN_SERVICES_SERIAL}" // wait for seconds between builds
-        wait_time="${env.SLEEP_TIME_BTWN_PARLLEL_SETS}" //wait for seconds between each parallel sets
+        time_wait="${env.SLEEP_TIME_BTWN_COMMON_AND_REGULAR_SERVICES}" // wait for seconds between builds
         credentialId= '3e38e78b-df56-4861-95f1-f084e03f93f5'
         FAILED_REPORT_FILE="${env.WORKSPACE}/FAILED_REPORT.properties"
-        EMAIL_REPORT_HEADER="${ENVIRONMENT} : SERIAL-PARALLEL DEPLOYMENTS COMMUNICATION"
-        NOTIFY_SUBJECT="Serial-Parallel Deployments"
+        EMAIL_REPORT_HEADER="${ENVIRONMENT} : BULK DEPLOYMENTS COMMUNICATION"
+        NOTIFY_SUBJECT="PROD BULK Deployments"
         EMAIL_TO="${EMAILTO}"
         emailDLPropertiesFile="E-MAIL_DL_SUCCESS.properties"
         servicesCount=0
@@ -130,200 +116,171 @@ pipeline{
         }
 
         // Validate all properties file
-        stage("Validate PropFile") {
+        stage("Validate PropFile and running schedulers") {
             steps {
               script {
                   def confFile='env-jobs.properties'
                   confPropFile=readProperties file: confFile
 
-                  env.JOB_PATH=confPropFile."${ENVIRONMENT}_JOBS"
-                  env.PROP_GIT_REPO=confPropFile.'DEFAULT_SERVICE_GIT_REPO'
-                  env.PROP_GIT_BRANCH="${ENVIRONMENT}"
-                  env.PROP_GIT_CO_DIR='services_prop_git_repo'
-                  env.INPUT_SERVICES_PROP_FILE='INPUT_SERVICES.properties'
+                  env.JOB_PATH=confPropFile."${ENVIRONMENT}_JOBS"           // child job path
+                  env.PROP_GIT_REPO=confPropFile.'DEFAULT_SERVICE_GIT_REPO' // repo url
+                  env.PROP_GIT_BRANCH="${ENVIRONMENT}"                      // branch to co
+                  env.PROP_GIT_CO_DIR='services_prop_git_repo/'              // dir whr to co repo
+
+                  // prop files
+                  env.COMMON_SERVICES_PROPSFILE=PROP_GIT_CO_DIR+'COMMON-SERVICES_appldeploy.properties' // serial
+                  env.ONLY_SCHEDULERS_PROPSFILE=PROP_GIT_CO_DIR+'ONLY_SCHEDULERS_appldeploy.properties' // parallel
+                  env.EXCLUDE_SCHEDULERS_FILE_PREFIX=PROP_GIT_CO_DIR+'EXCLUDE_SCHEDULERS_REG_SET'       // + '01_appldeploy.properties' parallel
+                  env.EXCLUDE_SCHEDULERS_PROPFILES=sh(script: "ls  ${EXCLUDE_SCHEDULERS_FILE_PREFIX}* |sort -n",returnStdout: true).trim()
 
                   println("Job Path: " + JOB_PATH)
                   println("Environment: " + ENVIRONMENT)
                   println("PROP GIT REPO: " + PROP_GIT_REPO)
                   println("PROP GIT BRANCH: " + PROP_GIT_BRANCH)
+                  println("COMMON SERVICES PROPS FILE: " + COMMON_SERVICES_PROPSFILE)
+                  println("ONLY SCHEDULERS PROPS FILE: " + ONLY_SCHEDULERS_PROPSFILE)
+                  println("EXCLUDE SCHEDULERS PROP FILES: " + EXCLUDE_SCHEDULERS_PROPFILES)
 
-                    // Checkout Prop files repo
-                    checkout([
-                           $class: 'GitSCM',
-                           branches: [[name: "${env.PROP_GIT_BRANCH}"]],
-                           extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: "${env.PROP_GIT_CO_DIR}"]],
-                           userRemoteConfigs: [[credentialsId: "${env.credentialId}", url: "${env.PROP_GIT_REPO}" ]]
-                    ])
+                  // Checkout repo for properties files
+                  checkout([
+                        $class: 'GitSCM',
+                        branches: [[name: "${env.PROP_GIT_BRANCH}"]],
+                        extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: "${env.PROP_GIT_CO_DIR}"]],
+                        userRemoteConfigs: [[credentialsId: "${env.credentialId}", url: "${env.PROP_GIT_REPO}" ]]
+                  ])
 
-                    def inputServicesPropFile=env.PROP_GIT_CO_DIR + '/' + env.INPUT_SERVICES_PROP_FILE
+                  // Validate prop files should exist and not empty ??
 
-                    def serialServicesList=readFile file: serialServicesRefFile
-                    serialServicesList=serialServicesList.readLines()
+                  // ***** Service Count in each files ***** //
 
-                    def inputpropFile=readFile file: inputServicesPropFile
-                    def inputServicesList=inputpropFile.readLines()
+                  // service count in COMMON_SERVICES_PROPSFILE
+                  def commonServicePropFile = readFile file: COMMON_SERVICES_PROPSFILE
+                  commonServiceList         = commonServicePropFile.readlines()
+                  commonServiceListCount    = commonServiceList.size()
+                  if (commonServiceListCount > 0 ) {
+                      println("Common Service List Count: " + commonServiceListCount )
+                  } else {
+                      println("!! No Common Service Deployment: Common Service file is empty !!")
+                  }
 
-                    servicesCount=inputServicesList.size()
+                  // service count in ONLY_SCHEDULERS_PROPSFILE
+                  def onlySchedularServicePropFile = readFile file: COMMON_SERVICES_PROPSFILE
+                  onlySchedularServiceList         = onlySchedularServicePropFile.readlines()
+                  onlySchedularServiceListCount    = onlySchedularServiceList.size()
+                  if (onlySchedularServiceListCount > 0 ) {
+                      println("Only Scheduler Service List Count: " + onlySchedularServiceListCount )
+                  } else {
+                      println("!! No Schedulers Deployment: Schedulers file is empty !!")
+                  }
 
-                    if(servicesCount>0){
-
-                        // Excluded Services
-                        excludeServicesList=EXCLUDE_SERVICES.split()
-                        println("Exclude Services List:"+excludeServicesList)
-                        if(excludeServicesList.length > 0){
-                            //initialize Excluded Services List File
-                            inputServicesPropFileNew='inputServicesListFinal.properties'
-                            sh ">$inputServicesPropFileNew"
-                            //filter our excluded services from main list
-                            inputServicesList.each{ SERVICE ->
-                               excludeServiceFound=excludeServicesList.findAll {it.contains(SERVICE.tokenize('=')[0].trim()) }
-                               if(!excludeServiceFound){
-                                   runShellCmd("echo $SERVICE >> $inputServicesPropFileNew")
-                               }
-                            }
-                            inputpropFile=readFile file: inputServicesPropFileNew
-                            inputServicesList=inputpropFile.readLines()
-                            finalServiceList=inputServicesPropFileNew
-                        }
-
-                        // If env is prod get prod scheduler service list from git repo
-                        if (ENVIRONMENT == 'prod-test') {
-                            env.PROD_SCH_GIT_REPO='https://gitw.cvshealth.com/SpecialtyRx/sprx2.0_infra_test.git'
-                            env.PROD_SCH_GIT_BRANCH="${ENVIRONMENT}"
-                            env.PROD_SCH_PROP_FILE='Schedulers-Services.txt'
-                            env.PROD_SCH_GIT_CO_DIR='prod_sch_services'
-
-                            // Checkout Prop files repo
-                            checkout([
-                                   $class: 'GitSCM',
-                                   branches: [[name: "${env.PROD_SCH_GIT_BRANCH}"]],
-                                   extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir: "${env.PROD_SCH_GIT_CO_DIR}"]],
-                                   userRemoteConfigs: [[credentialsId: "${env.credentialId}", url: "${env.PROD_SCH_GIT_REPO}" ]]
-                            ])
-
-                            def prodSchServiceFile = env.PROD_SCH_GIT_CO_DIR + '/' + env.PROD_SCH_PROP_FILE
-
-                            prodSchServicesList=readFile file: prodSchServiceFile
-                            prodSchServicesList=prodSchServicesList.readLines()
-                        } else {
-                            prodSchServicesList=[]
-                        }
-
-                        println(prodSchServicesList)
-
-                        sh """
-                            touch $ignoreServicesPropFile $serialServicesPropFile $parallelServicesPropFile $prodSchParallelServiceFile
-                        """
-                        inputServicesList.each { SERVICE ->
-
-                            def serialServiceMatched=serialServicesList.findAll { it.contains(SERVICE.tokenize('=')[0].trim()) }
-                            def prodSchServiceMatched=prodSchServicesList.findAll { it.contains(SERVICE.tokenize('=')[0].trim()) }
-
-                            if(SERVICE.tokenize('=')[-1].trim() == 'NA') {
-                                runShellCmd("echo $SERVICE >> $ignoreServicesPropFile")
-                            } else if(prodSchServicesList.size() > 0 && prodSchServiceMatched) {
-                                runShellCmd("echo $SERVICE >> $prodSchParallelServiceFile")
-                            } else if(serialServiceMatched) {
-                                runShellCmd("echo $SERVICE >> $serialServicesPropFile")
-                            } else {
-                                runShellCmd("echo $SERVICE >> $parallelServicesPropFile")
-                            }
-                        }
-                        TotalServices=getLineCountInfile(inputpropFile)
-                        serialServiceCount=getLineCountInfile(serialServicesPropFile)
-                        parallelServiceCount=getLineCountInfile(parallelServicesPropFile)
-                        NACount=getLineCountInfile(ignoreServicesPropFile)
-                        prodSchParallelServiceCount=getLineCountInfile(prodSchParallelServiceFile)
-                        println('Services Serial: ' + serialServiceCount +', Parallel: ' + parallelServiceCount + ', NA:' + NACount + ', Prod Scheduler: ' + prodSchParallelServiceCount)
-                    }
+                  // service count in EXCLUDE_SCHEDULERS_PROPFILES files ..
+                  if (EXCLUDE_SCHEDULERS_PROPFILES.split().lenght > 0 ){
+                      EXCLUDE_SCHEDULERS_PROPFILES.split().each { EXCLSCHDFILE ->
+                          def excludeSchdServicePropFile    = readFile file: COMMON_SERVICES_PROPSFILE
+                          def excludeSchdServiceList        = excludeSchdServicePropFile.readlines()
+                          def excludeSchdServiceListCount        = excludeSchdServiceList.size()
+                          if (excludeSchdServiceListCount > 0 ) {
+                              excludeSchdSvcCount =  excludeSchdServiceListCount
+                              println("Exclude Scheduler Service in File $EXCLSCHDFILE Count: " + excludeSchdServiceListCount )
+                          } else {
+                              println("!! Exclude Scheduler Deployment File $EXCLSCHDFILE is empty !!")
+                          }
+                      }
+                  }
               }
             }
-        }
+          }
 
-        // Preperation, adding header to the CSV file
-        stage("Report Prepration") {
-                when {
-                    expression { servicesCount > 0 }
-                }
-            steps{
-                script {
-                    def ReportHeader='ServiceName, Version, JenkinsBuildConsoleOutputURL, BuildResult'
-                    runShellCmd("echo $ReportHeader > $REPORT_CSV_FILE")
-                }
-            }
-        }
-       //Ordering the Serial services list and Deploying
-        stage("Serial Deployments") {
-            when {
-                expression { serialServiceCount > 0 }
-            }
-            steps {
-                script {
-                    dir(env.WORKSPACE) {
-                        def deployType='serial'
-                        def serialPropFile=readFile file: serialServicesPropFile
-                        def serial_services_list=serialPropFile.readLines()
-                        def serialServicesList=readFile file: serialServicesRefFile
-                        serialServicesList=serialServicesList.readLines()
-                        def finalOrderedSerialServiceList=[]
-                        serialServicesList.each { SVC ->
-                            def matchedEntry=serial_services_list.findAll { it.contains(SVC.tokenize('=')[0].trim()) }
-                            if(matchedEntry) {
-                                finalOrderedSerialServiceList.add(matchedEntry[0])
-                            }
-                        }
+          // Preperation, adding header to the CSV file
+          stage("Report Prepration") {
+                  when {
+                      expression { servicesCount > 0 }
+                  }
+              steps{
+                  script {
+                      def ReportHeader='ServiceName, Version, JenkinsBuildConsoleOutputURL, BuildResult'
+                      runShellCmd("echo $ReportHeader > $REPORT_CSV_FILE")
+                  }
+              }
+          }
 
-                        def deployResult=deployFromProps(finalOrderedSerialServiceList, deployType, agentName)
-                        if (!deployResult ) {
-                            DEPLOY_RESULT_STATUS=false
-                            println('Serial job failed,so Parallel jobs will be skipped')
-                        }
-                    }
-                }
-            }
-        }
-
-        // Deploy Parallel Services when serial has no failure
-        stage("Parallel Deployments") {
-            when {
-                expression { parallelServiceCount > 0 }
-            }
-            steps {
-                script {
-                    dir(env.WORKSPACE) {
-                        def parallelPropFile=readFile file: parallelServicesPropFile
-                        def parallel_services_list=parallelPropFile.readLines()
-                        if(DEPLOY_RESULT_STATUS) {
-                            def deployType='parallel'
-                            def parallelJobSet=parallel_services_list.collate(env.NUMBER_OF_JOBS_PRLL.toInteger())
-                            parallelJobSet.each { parallel_services_list_input ->
-                              def deployResult=deployFromProps(parallel_services_list_input, deployType, agentName)
-                              sleep wait_time.toInteger()
-                              if (!deployResult) {
-                                DEPLOY_RESULT_STATUS=false
-                                println('Some Parallel Jobs Failed')
-                              } else{
-                                 println('Parallel set Jobs are Successful')
+          // Parallel ..... only scheduler
+          stage("Parallel Run: ONLY SCHEDULERS SERVICES") {
+              when {
+                  expression { onlySchedularServiceListCount > 0 }
+              }
+              steps {
+                  script {
+                      dir(env.WORKSPACE) {
+                              def deployType='parallel'
+                              def parallelJobSet=onlySchedularServiceList.collate(env.NUMBER_OF_JOBS_PRLL.toInteger())
+                              parallelJobSet.each { paralle_only_service ->
+                                  def deployResult = deployFromProps(paralle_only_service, deployType, agentName)
+                                  if (!deployResult) {
+                                      DEPLOY_RESULT_STATUS = false
+                                      userPrompt('Some only scheduler parallel job Failed !!')
+                                  } else{
+                                      println('All Only Scheduler, Parallel Jobs are Successful !!')
+                                  }
                               }
-                            }
-                        } else {
-                            parallel_services_list.each { SERVICE ->
-                               def artifactID=SERVICE.tokenize('=')[0].trim()
-                               def version=SERVICE.tokenize('=')[1].trim()
-                               def result=artifactID + ', ' + '<p align=left style=font-size:12px>' + version + ', ' + 'NA' + ', ' + '<font color=orange>SKIPPED</font>'
-                               def CMD="""
-                                 result='''+result+'''
-                                 echo -e "${result}" | tee -a $REPORT_CSV_FILE
-                               """
-                               runShellCmd(CMD)
-                            }
-                        }
-                    }
-                }
-            }
-        }
+                      }
+                  }
+              }
+          }
 
-        // Prod Parallel
+          // Serial ..... common Services ..
+          stage("Serial Run: COMMON SERVICES") {
+              when {
+                  expression { commonServiceListCount > 0 }
+              }
+              steps {
+                  script {
+                      dir(env.WORKSPACE) {
+                          def deployType   = 'serial'
+                          commonServiceList.each { common_serial_service ->
+                              def deployResult = deployFromProps(common_serial_service, deployType, agentName)
+                              if (!deployResult) {
+                                  DEPLOY_RESULT_STATUS=false
+                                  userPrompt("Common Serial service $common_serial_service Failed!!")
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+
+          // Parallel ..... Exclude Scheduler services ...
+          stage("Parallel Run: EXCLUDE SCHEDULERS SERVICES") {
+              when {
+                  expression { excludeSchdSvcCount > 0 }
+              }
+              steps {
+                  script {
+                      dir(env.WORKSPACE) {
+                          def deployType='parallel'
+                          EXCLUDE_SCHEDULERS_PROPFILES.split().each { EXCLSCHDFILE ->
+                              def excludeSchdServicePropFile  = readFile file: COMMON_SERVICES_PROPSFILE
+                              def excludeSchdServiceList      = excludeSchdServicePropFile.readlines()
+                              def excludeSchdServiceListCount = excludeSchdServiceList.size()
+                              if (excludeSchdServiceListCount > 0 ) {
+                                  println("Run Exclude Scheduler Service in File $EXCLSCHDFILE Count: " + excludeSchdServiceListCount )
+                                  //def parallelJobSet=onlySchedularServiceList.collate(env.NUMBER_OF_JOBS_PRLL.toInteger())
+                                  //parallelJobSet.each { paralle_only_service ->
+                                      def deployResult = deployFromProps(excludeSchdServiceList, deployType, agentName)
+                                      if (!deployResult) {
+                                          DEPLOY_RESULT_STATUS = false
+                                          userPrompt('Few exclude scheduler (File $EXCLSCHDFILE) parallel job Failed !!')
+                                      } else{
+                                          println('All exclude scheduler (File $EXCLSCHDFILE), Parallel Jobs are Successful !!')
+                                      }
+                                  }
+                              }
+                          }
+                      }
+                  }
+              }
+          }
+
 
         // Generate HTML Report File
         stage("Generate HTML Report File") {
@@ -494,6 +451,7 @@ pipeline{
                    serviceListReport('Serial', serialServicesPropFile)
                    serviceListReport('Parallel', parallelServicesPropFile)
                    serviceListReport('Ignore', ignoreServicesPropFile)
+                   serviceListReport('Schedulers', schParallelServiceFile)
                    totalSuccess=sh (script:"grep -cw SUCCESS ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
                    totalFailure=sh (script:"grep -cw FAILURE ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
                    totalSkipped=sh (script:"grep -cw SKIPPED ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
@@ -544,6 +502,3 @@ pipeline{
         }
      }
 }
-
-
-
