@@ -1,4 +1,4 @@
-if `curl -X GET ... | grep ': true' `; do 
+if $(curl -X GET ... | grep ': true'); do 
     echo 'user_authorized'
 else
     echo "User not authorized"
