@@ -1,5 +1,5 @@
-                   println("!! Deployment Completed !!")
-                   totalSuccess = sh (script:"grep -cw SUCCESS ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
-                   totalFailure = sh (script:"grep -cw FAILURE ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
-                   totalSkipped = sh (script:"grep -cw SKIPPED ${HTML_REPORT_FILE} || true >/dev/null", returnStdout: true).trim()
-                   println('Total Success Jobs: ' + totalSuccess + '\n' + 'Total Failed Jobs: ' + totalFailure + '\n' + 'Total Skipped Jobs: ' + totalSkipped + '\n')
+if `curl -X GET ... | grep ': true' `; do 
+    echo 'user_authorized'
+else
+    echo "User not authorized"
+fi
