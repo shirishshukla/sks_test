@@ -1,29 +1,27 @@
-                def CMD = '''
-                  > ${HTML_REPORT_FILE}.other
-                  report_gen() {
-                    echo "<table class=\"table1\" border=\"3\" bordercolor=\"black\">" > ${HTML_REPORT_FILE}
-                    header=true
-                    SORTVAL="FAILED"
-                    cnt=1
-                    while read LINE; do
-                      if $header;then
-                          echo "<tr><th>No.</th><th>${LINE//,/</th><th>}</th></tr>" >> ${HTML_REPORT_FILE}
-                          header=false
-                      else
-                          if echo $LINE | awk '{print $NF}' | grep FAILED ; then 
-                              echo "<tr><td>$cnt</td><td>${LINE//,/</td><td>}</td></tr>" >> ${HTML_REPORT_FILE}
-                              ((cnt++))
-                          else 
-                              echo "$LINE" >> ${REPORT_CSV_FILE}.other                              
-                          fi
-                      fi
-                    done < ${REPORT_CSV_FILE}
-                    
-                    while read LINE; do
-                        echo "<tr><td>$cnt</td><td>${LINE//,/</td><td>}</td></tr>" >> ${HTML_REPORT_FILE}
-                        ((cnt++))
-                    done < ${REPORT_CSV_FILE}.other
-                    echo "</table>" >> ${HTML_REPORT_FILE}                    
-                  }
-                  report_gen 
-                '''
+def userInputForCleanup(def cleanFile){
+    MSG = "Empty $cleanFile and commit back."
+    println(MSG)
+    inputResult=false
+    TMOUT=300 // 5 mins
+    try {
+        timeout (time: TMOUT, unit: "SECONDS") {
+          inputResult = input(
+          message: "!! $MSG, Would you like to continue?",
+          ok: "Continue",
+          parameters: [[ $class: 'BooleanParameterDefinition',
+              defaultValue: true,
+              name: 'inputResult',]]
+          )
+        }
+    } catch (err) {
+        def execUser = err.getCauses()[0].getUser()
+        if(execUser.toString() == 'SYSTEM') {
+            inputResult=true
+            println("User Input Error/Timeout, consider commit and continue !!")
+        } else {
+           println("User Input Aborted, consider do not commit and continue !!")
+        }
+    }
+    if(inputResult) {
+        ....
+            
