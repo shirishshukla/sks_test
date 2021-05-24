@@ -1,0 +1,44 @@
+---
+
+## Get auth token
+- block:
+  - name: Get Auth Token
+    uri:
+      url: "{{ req_url }}"
+      method: POST
+      body: "{{ lookup('template','vm_content_lib.json.j2') }}"
+      force_basic_auth: yes
+      status_code: [200, 201]
+      validate_certs: true
+      body_format: json
+    register: auth_token
+
+  - assert:
+      that:
+        - auth_token is not defined
+        - auth_token.status == 200 or auth_token.status == 201
+      fail_msg: "Failed to get auth token"
+
+  - name: Extract Token
+    set_fact:
+      auth_token_id: "{{ auth_token.content['id'] }}"
+
+  - name: Push VM Template To Content Library
+    uri:
+      url: "{{ req_url }}"https://......./catalog-service/api/consumer/requests
+      method: POST
+      headers:
+        Authorization: "Bearer {{ auth_token_id }}"
+      body: "{{ lookup('template','tmpl_content_lib.json.j2') }}"
+      status_code: [200, 201]
+      validate_certs: true
+      body_format: json
+    register: vm_content_lib
+
+  - assert:
+      that:
+        - vm_content_lib is not defined
+        - vm_content_lib.status == 200 or vm_content_lib.status == 201
+      fail_msg: "Failed to sync template to Content Library"
+
+## End

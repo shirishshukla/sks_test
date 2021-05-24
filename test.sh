@@ -33,4 +33,3 @@ fi
 
 ## END ##
 
-SKS-test
