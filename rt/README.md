@@ -1,7 +1,7 @@
 module-rds-arora-cluster
 ========================
 
-An AWS RDS Aurora Cluster module.
+_An AWS RDS Aurora Cluster module._
 
 Module Input Variables
 ----------------------
