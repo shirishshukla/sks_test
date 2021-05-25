@@ -1,10 +1,11 @@
 module-rds-arora-cluster
-==========
+========================
 
-An AWS RDS Cluster module.
+An AWS RDS Aurora Cluster module.
 
 Module Input Variables
----------------
+----------------------
+
 - `cluster_tags` - Additional Cluster tags to be applied.
 - `rds_db_port` - RDS DB Port Default aurora-postgresql 5432 else 3306
 - `rds_vpc_id`  - VPC ID for creating security group else will be created in default VPC.
@@ -36,8 +37,8 @@ Module Input Variables
 - `fox_application` - Fox Application Name
 
 Usage
------
-Sample Example
+------
+_Sample Example_
 
 ```js
 module "module-rds-cluster" {
@@ -94,4 +95,4 @@ Outputs
 
 
 END 
-----------------
+----
