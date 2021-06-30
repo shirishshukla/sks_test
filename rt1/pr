@@ -1,0 +1,167 @@
+//
+// Provisions a Lambda function to send cloudwatch alerts to slack.
+//
+
+provider "aws" {
+  region = var.aws_region
+}
+
+locals {
+  lambda_function_name = "SlackAlertsFromSNS"
+  python_libs = {
+    "requests" = "2.25.1"
+  }
+}
+
+// Lambda Layer
+module "lambda_layer" {
+  for_each = local.python_libs
+
+  source          = "git::ssh://git@foxrepo.praecipio.com:7999/fcc/tf-module-lambda-layers.git"
+  lambda_name     = local.lambda_function_name
+  runtime_name    = "python"
+  runtime_version = "3.8"
+  package_name    = each.key
+  package_version = each.value
+  s3_bucket_name  = "shared-prod-lambda-layer-dependencies"
+}
+
+// Create zip file for slack alerts Lambda function.
+data "archive_file" "slack_alert" {
+  type        = "zip"
+  source_file = "${path.module}/${var.slack_alert_filename}.py"
+  output_path = "./.${var.slack_alert_filename}.zip"
+}
+
+// IAM Role for Slack Alerts Lambda
+data "aws_iam_policy_document" "slack_alert_lambda" {
+  // Access Of CW Log Group
+  statement {
+    actions = [
+      "logs:CreateLogGroup",
+      "logs:CreateLogStream",
+      "logs:PutLogEvents",
+    ]
+
+    resources = [
+      "arn:aws:logs:::*",
+    ]
+  }
+  // Secret Manager Read Permission
+  statement {
+    actions = [
+      "secretsmanager:GetResourcePolicy",
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret",
+      "secretsmanager:ListSecretVersionIds",
+      "secretsmanager:ListSecrets"
+    ]
+
+    resources = [
+      "arn:aws:secretsmanager:::*"
+    ]
+  }
+}
+
+// Assume Slack Alerts role for Lambda
+data "aws_iam_policy_document" "slack_alert_assume" {
+  statement {
+    actions = ["sts:AssumeRole"]
+
+    principals {
+      type        = "Service"
+      identifiers = ["lambda.amazonaws.com"]
+    }
+  }
+}
+
+// IAM Policy for Slack Alert Lambda to create logs.
+resource "aws_iam_policy" "slack_alert_lambda" {
+  name        = "slack_alert_lambda"
+  path        = "/"
+  description = "Policy to allow lambda access to create logs."
+  policy      = data.aws_iam_policy_document.slack_alert_lambda.json
+}
+
+// Create Slack Alert Lambda Role from above IAM Policy
+resource "aws_iam_role" "iam_for_lambda_slackalert" {
+  name               = var.slack_alert_lambda_role_name
+  assume_role_policy = data.aws_iam_policy_document.slack_alert_assume.json
+}
+
+// Attach Slack Alerts IAM Role policy to role
+resource "aws_iam_role_policy_attachment" "slack_alert_attach" {
+  role       = aws_iam_role.iam_for_lambda_slackalert.name
+  policy_arn = aws_iam_policy.slack_alert_lambda.arn
+}
+
+// Lambda Permissions from Cloudwatch for Slack Alerts.
+resource "aws_lambda_permission" "slack_alert_allow_sns" {
+  statement_id  = "AllowExecutionFromSNS"
+  action        = "lambda:InvokeFunction"
+  function_name = aws_lambda_function.slack_alert_lambda_function.function_name
+  principal     = "sns.amazonaws.com"
+  source_arn    = aws_sns_topic.slack_alert_sns_topic.arn
+}
+
+// Lambda Slack Alert Function
+resource "aws_lambda_function" "slack_alert_lambda_function" {
+  filename         = data.archive_file.slack_alert.output_path
+  source_code_hash = filebase64sha256(data.archive_file.slack_alert.output_path)
+  function_name    = local.lambda_function_name
+  role             = aws_iam_role.iam_for_lambda_slackalert.arn
+  handler          = "slackalerts.lambda_handler"
+  runtime          = "python3.8"
+  timeout          = "20"
+  layers           = [for k, layer in module.lambda_layer : layer.layer_arn]
+
+
+  environment {
+    variables = {
+      asm_secret = "slack_alert_url" // name of aws secret manager for slack url
+    }
+  }
+
+  tags = {
+    Application   = "Slack Alerts"
+    Environment   = var.env
+    "Charge Code" = var.charge_code
+    Role          = "Lambda Function"
+  }
+
+  depends_on = [
+    aws_iam_role.iam_for_lambda_slackalert,
+    data.archive_file.slack_alert,
+    module.lambda_layer
+  ]
+}
+
+// SNS topic for slack alerts
+resource "aws_sns_topic" "slack_alert_sns_topic" {
+  name = "slack-alerts"
+}
+
+// SNS subscription to trigger the slack-alert lambda function.
+resource "aws_sns_topic_subscription" "slack_alert_sns_sub" {
+  topic_arn = aws_sns_topic.slack_alert_sns_topic.arn
+  protocol  = "lambda"
+  endpoint  = aws_lambda_function.slack_alert_lambda_function.arn
+}
+
+// Used to attach to other roles to allow access to publish to topic
+resource "aws_iam_policy" "alerts" {
+  name        = "SlackAlertsFromBackup"
+  path        = "/service-role/"
+  description = "allow access to publish messages to slack via sns topic"
+  policy      = data.aws_iam_policy_document.alerts.json
+}
+
+data "aws_iam_policy_document" "alerts" {
+  statement {
+    effect    = "Allow"
+    actions   = ["sns:Publish"]
+    resources = [aws_sns_topic.slack_alert_sns_topic.arn]
+  }
+}
+
+// End
