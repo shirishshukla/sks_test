@@ -1,0 +1,45 @@
+##
+#
+##
+
+$SCRIPTBLOCK = {
+  
+  param($fileSource, $fileDest, $fileName)
+    
+  ## Downlodad file from remote share
+  $client = New-Object System.Net.WebClient
+  $client.DownloadFile($fileSource, $fileDest)
+
+  # Run Binary
+  $execFile = $fileDest + $fileName
+  Start-Process -FilePath "$execFile"  #-ArgumentList KEY="VALUE"
+}
+
+
+# Cred get from Jenkins JOBs environment binding
+$username = "$env:username"
+$password = "$env:password"
+$securePassword = ConvertTo-SecureString $password -AsPlainText -Force
+$cred = New-Object System.Management.Automation.PSCredential \$username,$securePassword
+
+# Servers 
+$servers = "$env:servers".split(',')
+
+# files to copy and run 
+$fileSource="https://web.com/files/file.exe"
+$fileName=$fileSource.split('/')[-1]
+$fileDest="D:\here\sws\"
+
+foreach($server in $servers){
+    try {
+        Write-host "Running For Server: $server"
+        $result = Invoke-Command -ComputerName "${server}" -Credential $cred -ScriptBlock $SCRIPTBLOCK -ErrorAction Ignore `
+                                 -ArgumentList ($fileSource, $fileDest, $fileName)
+    }
+    catch {
+        Write-host "Script Failed with Err $_"
+        exit 1
+    }
+}
+
+## END
