@@ -1,0 +1,92 @@
+##
+# Description: Deply an application in AWS EKS cluster
+##
+
+include:
+  - template: k8s/Base.latest.loader.gitlab-ci.yml
+
+stages:
+  - init
+  - validate
+  - buildTest
+  - deployTest
+  - cleanup
+
+.common_tasks: &common_tasks
+  only:
+    #- merge_requests
+    - test             # only for test branch
+    #- tags
+  tags:
+    - k8s
+
+### Definitions
+.test_env: &test_env
+  environment: test
+  variables:
+    env_tag: 'test'
+    namespace: 'dep-test'
+
+.qa_env: &qa_env
+  environment: qa
+  variables:
+    env_tag: 'qa'
+    namespace: 'dep-test'
+
+
+.prod_env: &test_env
+  environment: prod
+  variables:
+    env_tag: 'prod'
+    namespace: 'dep-prod'
+
+### Deployment
+# Build
+build_state:
+  state: build
+  <<: *common_tasks
+  script:
+    - echo "Building Image for environment ${env_tag}"
+
+# Validate
+build_state:
+  state: build
+  <<: *common_tasks
+  script:
+    - kubectl get namespaces
+    - kubectl describe namespace "${namespace}" || kubectl create namespace "${namespace}"
+    - sed -i "s|{{NAMESPACE}}|${namespace}|g"          k8s/deployment.yaml
+    - sed -i "s|{{APP_NAME}}|${APP_NAME}|g"            k8s/deployment.yaml
+    - sed -i "s|{{IMAGE_NAME}}|${CONTAINER_IMAGE}|g"   k8s/deployment.yaml
+
+build_state:
+  state: validate
+  <<: *common_tasks
+  script:
+    - echo "Namespace EXIST?"
+    - kubectl get namespces ${namespace}
+    - cat k8s/deployment.yaml
+
+
+deploy_test_k8s:
+  stage: deploy
+  needs: [build]
+  <<: *common-tasks
+
+run_stage:
+  stage: run
+  only:
+    - stage
+  before_script:
+    - echo before
+  script:
+    - echo script
+
+test_stage:
+  stage: test
+  only:
+    - stage
+  before_script:
+    - echo before
+  script:
+    - bash script.sh

@@ -1,0 +1,40 @@
+##
+# Description: Deply an application in AWS EKS cluster
+##
+
+include:
+  - template: k8s/Base.latest.loader.gitlab-ci.yaml
+
+stages:
+  - initialize
+  - validate
+  - build
+  - deploy
+  - test
+  - cleanup
+
+initialize:
+  extends: .initialize
+
+validate:
+  extends: .validate
+
+build:
+  extends: .build
+
+deploy:
+  extends: .deploy
+  dependencies:
+    - build
+
+test:
+  extends: .test
+  dependencies:
+    - deploy
+
+cleanup:
+  extends: .destroy
+  dependencies:
+    - deploy
+
+## END
