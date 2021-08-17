@@ -1,0 +1,45 @@
+####
+##
+####
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{APP_NAME}}_DEP
+spec:
+  selector:
+    matchLabels:
+      app: {{APP_NAME}}
+  replicas: 2 # tells deployment to run 2 pods matching the template
+  template:
+    metadata:
+      labels:
+        app: {{APP_NAME}}
+    spec:
+      containers:
+      - name: {{APP_NAME}}
+        image: {{CONTAINER_IMAGE}}
+        ports:
+        - containerPort: 5678
+        args:
+          - "-listen=:5678"
+          - "-text=\"hello this is testing from POD hostname $HOSTNAME\""
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-service
+  namespace: {{NAMESAPCE}}
+spec:
+  selector:
+    app: {{APP_NAME}}
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 5678
+  type: LoadBalancer
+
+
+## END

@@ -1,0 +1,89 @@
+---
+
+##
+#
+##
+
+## Variables
+variables:
+  K8S_DIR: "${CI_PROJECT_DIR}/k8s"
+  CONTAINER_IMAGE: hashicorp/http-echo
+  APP_NAME: testEcho
+
+
+.env: &env
+  environment: test
+  variables:
+    env_tag: test
+    namespace: dep-test
+
+## Common Task properties
+.common_tasks: &common_tasks
+  only:
+    - main
+  tags:
+    - linux
+
+## *************** Stages *************** ##
+.initialize: &initialize
+  stage: initialize
+  <<: *common_tasks
+  script:
+    - cd ${K8S_DIR}
+    - kubectl version
+    - kubectl get namespaces
+    - kubectl describe namespace "${namespace}" || kubectl create namespace "${namespace}"
+    - cp deployment.tmpl.yaml                          deployment.yaml
+    - sed -i "s|{{NAMESPACE}}|${namespace}|g"          deployment.yaml
+    - sed -i "s|{{APP_NAME}}|${APP_NAME}|g"            deployment.yaml
+    - sed -i "s|{{IMAGE_NAME}}|${CONTAINER_IMAGE}|g"   deployment.yaml
+
+.validate: &validate
+  stage: validate
+  <<: *common_tasks
+  script:
+    - cd ${K8S_DIR}
+    - kubectl get namespaces ${namespace} || (echo namespace $namespace not exist && xit 1)
+    - echo "below deployment to be created ..."
+    - cat deployment.yaml
+
+.build: &build
+  stage: build
+  <<: *common_tasks
+  script:
+    - cd ${K8S_DIR}
+    - kubectl apply -f deployment.yml -server-dry-run
+
+.deploy: &deploy
+  stage: deploy
+  <<: *common_tasks
+  script:
+    - cd ${K8S_DIR}
+    - kubectl apply -f deployment.yml -server-dry-run
+
+.test: &test
+  stage: test
+  <<: *common_tasks
+  script:
+    - cd ${K8S_DIR}
+    - kubectl get pods ${APP_NAME} -n ${namespace}
+    - kubectl get service ${APP_NAME}_svc -n -n ${namespace}
+    - |
+        for i in {1..10}; do
+          LBIP=$(kubectl get svc ${APP_NAME}_svc -ao jsonpath='{..ip}')
+          [ ! -z $LBIP ] && break
+          sleep 6
+        done
+        [ ! -z $LBIP ] && curl -L $LBIP && echo SUCCESS || (echo FAILED && exit 1)
+
+
+.destroy: &destroy
+  stage: cleanup
+  <<: *common_tasks
+  when: manual
+  script:
+    - cd ${K8S_DIR}
+    - echo "deleting pods svc .. cleanup"
+    - echo cleanup, Successfull..
+    
+## END
