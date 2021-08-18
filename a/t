@@ -1,0 +1,1 @@
+{'control_plane': 'true', 'data_plane': 'true', 'uris': ['ldap://VMDKSA69901M1K.us.bank-dns.com:389'], 'bind_dn': 'RedisappidIT', 'bind_pass': 'WUAAeLitTk@B3y', 'user_dn_query': {'base': 'DC=us,DC=bank-dns,DC=com', 'filter': 'CN=%u', 'scope': 'subtree'}, 'dn_group_query': {'base': 'DC=us,DC=bank-dns,DC=com', 'filter': 'member=%D', 'scope': 'subtree'}}
