@@ -8,8 +8,8 @@ import os, sys
 
 
 # vars
-redisUser = os.environ['clusterURL'] if 'clusterURL' in os.environ  or 'admin@CHANGEME.com'
-redisPassword = os.environ['clusterURL'] if 'clusterURL' in os.environ  or 'password'
+redisUser = os.environ['redisUser'] if 'redisUser' in os.environ  else 'admin@CHANGEME.com'
+redisPassword = os.environ['redisPassword'] if 'redisPassword' in os.environ  else  'password'
 
 defaultClusterURL='https://10.127.214.36:9443/v1/cluster/ldap'
 clusterURL = os.environ['clusterURL'] if 'clusterURL' in os.environ else defaultClusterURL
@@ -18,7 +18,7 @@ clusterURL = os.environ['clusterURL'] if 'clusterURL' in os.environ else default
 headers = {'Content-Type': 'application/json'}
 payloadJsonData=xxx
 
-## print 
+## print
 print('URL: ', clusterURL)
 print('Payload: ', json.dumps(payloadJsonData))
 
