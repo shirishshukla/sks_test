@@ -1,0 +1,33 @@
+####
+## Description:
+####
+
+import requests
+import json
+import os, sys
+
+
+# vars
+redisUser = os.environ['clusterURL'] if 'clusterURL' in os.environ  or 'admin@CHANGEME.com'
+redisPassword = os.environ['clusterURL'] if 'clusterURL' in os.environ  or 'password'
+
+defaultClusterURL='https://10.127.214.36:9443/v1/cluster/ldap'
+clusterURL = os.environ['clusterURL'] if 'clusterURL' in os.environ else defaultClusterURL
+
+## headers
+headers = {'Content-Type': 'application/json'}
+payloadJsonData=xxx
+
+## print 
+print('URL: ', clusterURL)
+print('Payload: ', json.dumps(payloadJsonData))
+
+try:
+    response = requests.put(clusterURL, verify=True, data=json.dumps(payloadJsonData), headers=headers, auth=(redisUser, redisPassword))
+    print(response)
+except Exception as err:
+    print(err)
+    pass
+
+## END
+
