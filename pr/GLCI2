@@ -1,0 +1,156 @@
+---
+
+##
+#
+##
+
+## Variables
+variables:
+  K8S_DIR: "${CI_PROJECT_DIR}/k8s"
+  CONTAINER_IMAGE: hashicorp/http-echo
+  APP_NAME: testEcho
+  KUBECONFIG: /etc/k8sconfig
+  EKSCLUSTER:  Dev_Eks_Cluster
+  REGION: us-west-1
+  DEPL_TMPLFILE: deployment.tmpl.yml
+  DEPLFILE: deployment.yaml
+
+
+# Environment specific variable setup
+.set_env: &set_env
+  environment:
+    name: deployment
+  variables:
+    env_tag: test
+    namespace: dep-test
+
+
+# Common Task properties
+.common_config: &common_config
+  only:
+    - main   # only to run for this branch
+
+
+# setup kubectl and k8s auth
+.set_kubeconfig: &set_kubeconfig |
+    echo do kubectl binary
+    curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
+    chmod +x kubectl
+    mv kubectl /usr/local/bin/
+    kubectl config view
+    kubectl version
+    echo setting k8s config...
+    echo * setup eks cluster auth *
+    aws sts get-caller-identity
+    aws eks update-kubeconfig --name $EKSCLUSTER --region $REGION --kubeconfig $KUBECONFIG
+    echo *****************
+    cat -n $KUBECONFIG
+    echo *****************
+
+# create deployment file
+.create_depfile: &create_depfile |
+    echo ****** Creating deployment file ...
+    cd ${K8S_DIR}
+    cp $DEPL_TMPLFILE                                $DEPLFILE
+    sed -i "s|{{NAMESPACE}}|${namespace}|g"          $DEPLFILE
+    sed -i "s|{{APP_NAME}}|${APP_NAME}|g"            $DEPLFILE
+    sed -i "s|{{IMAGE_NAME}}|${CONTAINER_IMAGE}|g"   $DEPLFILE
+
+# set namespace to current context
+.set_namespace: &set_namespace |
+    echo Setting default namespace to $namespace
+    kubectl config set-context --current --namespace=$namespace
+
+
+## ***** Stages ***** ##
+.initialize: &initialize
+  stage: initialize
+  <<: *set_env
+  <<: *common_config
+  script:
+    - *set_kubeconfig
+    - echo create namespace if not exist ...
+    - kubectl get namespaces
+    - kubectl describe namespace $namespace || kubectl create namespace $namespace
+
+
+.validate: &validate
+  stage: validate
+  <<: *set_env
+  <<: *common_config
+  script:
+    - *set_kubeconfig
+    - *create_depfile
+    - cd ${K8S_DIR}
+    - kubectl get namespaces && echo kubectl auth working ... || (echo "FAIL - kubectl auth failed." && exit 1)
+    - kubectl get namespaces $namespace || (echo namespace $namespace not exist && exit 1)
+    - echo Below deployment to be created ...
+    - echo ***************** deployment file *****************
+    - cat -n $DEPLFILE
+    - echo ***************** END *****************
+    - echo Validate deployment file $DEPLFILE ...
+    - kubectl apply -f $DEPLFILE -server-dry-run -n $namespace
+
+
+.build: &build
+  stage: build
+  <<: *set_env
+  <<: *common_config
+  script:
+    - *set_kubeconfig
+    - *create_depfile
+    - *set_namespace
+    - cd ${K8S_DIR}
+    - kubectl create -f $DEPLFILE
+
+
+.deploy: &deploy
+  stage: deploy
+  <<: *set_env
+  <<: *common_config
+  script:
+    - *set_kubeconfig
+    - *create_depfile
+    - *set_namespace
+    - cd ${K8S_DIR}
+    - kubectl apply -f $DEPLFILE
+
+
+.test: &test
+  stage: test
+  <<: *set_env
+  <<: *common_config
+  script:
+    - *set_kubeconfig
+    - *set_namespace
+    - cd ${K8S_DIR}
+    - echo Validating pod and services created and extract LB IP ...
+    - kubectl get pods ${APP_NAME}
+    - kubectl get service ${APP_NAME}_svc
+    - |
+        for cnt in {1..10}; do
+          echo RETRY: $cnts
+          LBIP=$(kubectl get svc ${APP_NAME}_svc -ao jsonpath='{..ip}')
+          [ ! -z $LBIP ] && break
+          sleep 6
+        done
+        echo LBIPL: $LBIP
+        [ ! -z $LBIP ] && curl -L $LBIP && echo SUCCESS || (echo FAILED TO GET LB IP && exit 1)
+
+
+.destroy: &destroy
+  stage: cleanup
+  <<: *set_env
+  <<: *common_config
+  when: manual
+  script:
+    - *set_kubeconfig
+    - *create_depfile
+    - *set_namespace
+    - cd ${K8S_DIR}
+    - echo Deleting deployment cleanup ...
+    - kubectl delete -f $DEPLFILE
+    - echo Cleanup is successfull ..
+
+
+## END
