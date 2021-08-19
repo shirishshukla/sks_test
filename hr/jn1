@@ -1,0 +1,122 @@
+#!/usr/bin/groovy
+
+def agentName="any"
+
+
+// Pipeline
+pipeline{
+
+    agent{
+        label agentName
+    }
+
+    environment{
+        SERVERLIST_MAPPING_FILE="${env.WORKSPACE}/server_mapping.txt"
+        credentialId= '3e38e78b-df56-4861-95f1-f084e03f93f5'
+    }
+
+    // parameters
+    parameters {
+      choice(name: 'Environment',  choices=['env1', 'env2', 'env3'], description: 'Select Environment'),
+      choice(name: 'Action',       choices=['take_status_backup', 'compare_with_last_backup'], description: 'Select Action'),
+
+      // Execute stages or just load Jenkins file
+      booleanParam(name: "skip_builds", defaultValue: false, description: "Select to skip builds stages, just load Jenkinsfile")
+    }
+
+    stages{
+
+        // Clean  WORKSPACE
+        stage("Clean WS") {
+            steps{
+                step([$class: 'WsCleanup'])
+            }
+        }
+
+        // Checkout GIT REPO
+        stage("Checkout") {
+            steps{
+                checkout scm
+            }
+        }
+
+        stage("Take Backup"){
+            when {  expression { params.Action == 'take_status_backup'} }
+            steps{
+                script{
+                    dir(env.WORKSPACE) {
+                        def serverListFile = readFile file: SERVERLIST_MAPPING_FILE
+                        def serverList = serverListFile.readLines()
+                        serverList.each { LINE ->
+                            ENVR=LINE.tokenize(':')[0].trim()
+                            SERVER=LINE.tokenize(':')[1].trim()
+                            TOKEN=LINE.tokenize(':')[2].trim()
+
+                            ReportOld = 'Report.'+${SERVER}+'.Back'
+
+                            if(ENVR == Environment){
+                              def back_status = sh (script: "ssh -q -T devops@${SERVER} 'consul members --token=$TOKEN | egrep -v '^Node ' | awk '{print $1,$3}' | tee ${ReportOld} echo success || echo fail || true", returnStdout: true)
+                              echo "$ENVR - $SERVER  - consul member status report backup"
+                              if(cmp_status == 'success'){
+                                  echo "Backup SUCCESS!!"
+                              } else {
+                                  echo "Backup FAIL!!"
+                                  buildStatus=false
+                                  //currentBuild.result='FAILED'
+                              }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage("Compare With Last Backup"){
+            when { not {expression { params.Action == 'compare_with_last_backup' } } }
+            steps{
+                script{
+                    dir(env.WORKSPACE) {
+                        def serverListFile = readFile file: SERVERLIST_MAPPING_FILE
+                        def serverList = serverListFile.readLines()
+                        serverList.each { LINE ->
+                            ENVR=LINE.tokenize(':')[0].trim()
+                            SERVER=LINE.tokenize(':')[1].trim()
+                            TOKEN=LINE.tokenize(':')[2].trim()
+
+                            ReportOld = 'Report.'+${SERVER}+'.Back'
+                            ReportNew = 'Report.'+${SERVER}+'.New'
+
+                            if(ENVR == Environment){
+                              def new_status = sh (script: "ssh -q -T devops@${SERVER} 'consul members --token=$TOKEN | egrep -v '^Node ' | awk '{print $1,$3}' | tee ${ReportNew} || true", returnStdout: true)
+                              def cmp_status = sh (script: "diff <(sort ${ReportOld}) <(sort ${ReportNew} && echo success || echo fail || true", returnStdout: true)
+
+                              echo "$ENVR - $SERVER  consul member status report comparision with last statuss"
+                              if(cmp_status == 'success'){
+                                  echo "Compare Result SUCCESS!!"
+                              } else {
+                                  echo "Compare Result FAIL!!"
+                                   buildStatus=false
+                                   //currentBuild.result='FAILED'
+                              }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    post {
+      success {
+        echo "Success.."
+      }
+
+      failure {
+        echo "Failure.."
+      }
+
+    }
+
+}
+
+// END
