@@ -1,0 +1,78 @@
+////////////////////
+//
+////////////////////
+
+// function to run powershell script
+def runPowershellScript(def CMD) {
+    def stdout = powershell(returnStdout: true, script: CMD )
+    echo "Run complete!!"
+    return stdout.trim()
+}
+
+
+// main pipeline
+pipeline {
+
+  // default node agent label
+  agent {
+      label 'DCIU-IT2-OBC'
+  }
+
+  // Environment
+  environment {
+      NODE  = 'DCIU-IT2-OBC'
+  }
+
+  // parameters
+  parameters {
+    string(name: 'redisUser',  defaultValue: 'admin@XXXXX.com', description: 'Redis user name')
+    string(name: 'redisPassword', defaultValue: 'password', description: 'Redis user password')
+    string(name: 'clusterURL',  defaultValue: 'https://10.127.214.36:9443/v1/cluster/ldap', description: 'Cluster URL')
+
+    // Execute stages or just load Jenkins file
+    booleanParam(name: 'skip_builds', defaultValue: false, description: 'Select to skip builds stages, just load Jenkinsfile')
+  }
+
+  // stages main
+  stages {
+
+      stage('Prepare Environment') {
+          steps {
+            script {
+                println("Running for values...")
+            }
+          }
+      } // end stage
+
+      stage('Execution') {
+          steps {
+            script {
+                println("Action ...")
+
+                def headers = '{"Content-Type": "application/json"}'
+                writeFile file: 'payload.json', text: '{"control_plane": true, "data_plane": true, "uris": ["ldap://xxxxxxxx.xx.xxxx-dns.com:389"], "bind_dn": "RedisappidIT", "bind_pass": "WUAAeLitTk@B3y", "user_dn_query": {"base" : "DC=us,DC=bank-dns,DC=com", "filter" : "CN=%u", "scope": "subtree"}, "dn_group_query": {"base" : "DC=xx,DC=xxxx-dns,DC=com", "filter" : "member=%D", "scope": "subtree"}}'
+                def CMD = "curl -kLu \'${params.redisUser}:${params.redisPassword}\' --location-trusted -H \'${headers}\' -X PUT -d @payload.json ${params.clusterURL}"
+                def OUTPUT = runPowershellScript(CMD)
+                println(OUTPUT)
+
+            }
+          }
+
+      } // end stage
+
+  } // end stages
+
+  // Post
+  post {
+      success {
+          echo "Pipeline Successful!!"
+      }
+      failure {
+          echo "Pipeline Failed!!"
+      }
+  }
+
+} // end pipeline
+
+
+// End
