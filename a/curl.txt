@@ -39,7 +39,7 @@ pipeline {
       stage('Prepare Environment') {
           steps {
             script {
-                println("Running for values...")
+                println("Running for values...")̵
             }
           }
       } // end stage
@@ -49,9 +49,13 @@ pipeline {
             script {
                 println("Action ...")
 
-                def headers = '{"Content-Type": "application/json"}'
+                //def headers = '{"Content-Type": "application/json"}'
                 writeFile file: 'payload.json', text: '{"control_plane": true, "data_plane": true, "uris": ["ldap://xxxxxxxx.xx.xxxx-dns.com:389"], "bind_dn": "RedisappidIT", "bind_pass": "WUAAeLitTk@B3y", "user_dn_query": {"base" : "DC=us,DC=bank-dns,DC=com", "filter" : "CN=%u", "scope": "subtree"}, "dn_group_query": {"base" : "DC=xx,DC=xxxx-dns,DC=com", "filter" : "member=%D", "scope": "subtree"}}'
-                def CMD = "curl -kLu \'${params.redisUser}:${params.redisPassword}\' --location-trusted -H \'${headers}\' -X PUT -d @payload.json ${params.clusterURL}"
+
+                def CMD = '''
+                    curl -kLu \'${params.redisUser}:${params.redisPassword}\' --location-trusted -H {"Content-Type": "application/json"} -X PUT -d @payload.json ${params.clusterURL}
+                '''
+
                 def OUTPUT = runPowershellScript(CMD)
                 println(OUTPUT)
 
