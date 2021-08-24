@@ -1,0 +1,141 @@
+#!/usr/bin/groovy
+
+def agentName="SPRx2.0_DEPLOY-ONLY"
+
+def runBackup(ENVR, SERVER, TOKEN, ReportOld){
+  def CMDBkp = """
+    ssh -q -T ${SSH_USER}@${SERVER} "consul members --token=${TOKEN}" | awk '{print \$3\":\"\$4}' | tee ${ReportOld} && echo success || echo fail || true
+  """
+  def back_status = sh (script: CMDBkp, returnStdout: true)
+  echo "$ENVR - $SERVER  - Consul member status report backup"
+
+  if(back_status == 'success'){
+      echo "Backup SUCCESS!!"
+  } else {
+      echo "Backup FAIL!!"
+      buildStatus=false
+  }
+}
+
+def backupDiff(ENVR, SERVER, TOKEN, ReportOld, ReportNew){
+  // Take new backup
+  def currBkp = runBackup(ENVR, SERVER, TOKEN, ReportNew)
+
+  def BKPDiff = """
+    ssh -q -T ${SSH_USER}@${SERVER} "diff <(sort ${ReportOld}) <(sort ${ReportNew}" && echo success || echo fail || true
+  """
+  def backup_diff_status = sh (script: BKPDiff, returnStdout: true)
+
+  echo "$ENVR - $SERVER  consul member status report comparision with last statuss"
+  if(cmp_status == 'success'){
+      echo "Compare Backup Result SUCCESS!!"
+  } else {
+      echo "Compare Backup Result FAIL!!"
+      buildStatus=false
+  }
+}
+
+//
+def runAction(action){
+    def serverListFile = readFile file: SERVERLIST_MAPPING_FILE
+    def serverList = serverListFile.readLines()
+    serverList.each { LINE ->
+        echo "line $LINE"
+        ENVR=LINE.tokenize(':')[0].trim()
+        SERVER=LINE.tokenize(':')[1].trim()
+        TOKEN=LINE.tokenize(':')[2].trim()
+
+        ReportOld = '/var/tmp/Report.'+SERVER+'.Back'
+        ReportNew = '/var/tmp/Report.'+SERVER+'.New'
+
+        if(ENVR == ENVIRONMENT){
+
+          if (params.Action == 'take_status_backup'){
+            runBackup(ENVR, SERVER, TOKEN, ReportOld)
+          }
+
+          if (params.Action == 'compare_with_last_backup'){
+            backupDiff(ENVR, SERVER, TOKEN, ReportOld, ReportNew)
+          }
+        }
+    }
+
+}
+
+// Pipeline
+pipeline{
+
+    agent{
+        label agentName
+    }
+
+    environment{
+        SERVERLIST_MAPPING_FILE="${env.WORKSPACE}/server_mapping.txt"
+        credentialId= '3e38e78b-df56-4861-95f1-f084e03f93f5'
+        SSH_USER = 'deploy'
+    }
+
+    // parameters
+    parameters {
+      choice(name: 'ENVIRONMENT',  choices: ['DEV-P','DEV-0','DEV-1','DEV-2','DEV-3','DEV-4','DEV-5','AZSIT-1','AZSIT-2','AZSIT-3','SIT-P','SIT-0','SIT-1','SIT-2','SIT-3','SIT-4','SIT-5','UAT-0','UAT-1','UAT-2','UAT-3','UAT-4','UAT-5','PT','TRNG','CTE','DR','PROD'], description: 'Select Environment')
+      choice(name: 'Action',       choices: ['take_status_backup', 'compare_with_last_backup'], description: 'Select Action')
+
+      // Execute stages or just load Jenkins file
+      booleanParam(name: "skip_builds", defaultValue: false, description: "Select to skip builds stages, just load Jenkinsfile")
+    }
+
+    stages{
+
+        // Clean  WORKSPACE
+        stage("Clean WS") {
+            steps{
+                step([$class: 'WsCleanup'])
+            }
+        }
+
+        // Checkout GIT REPO
+        stage("Checkout") {
+            steps{
+                checkout scm
+            }
+        }
+
+        stage("Take Backup"){
+            when { expression { params.Action == 'take_status_backup'} }
+            steps{
+                script{
+                    dir(env.WORKSPACE) {
+                      runAction(params.Action)
+                    }
+                }
+            }
+        }
+
+        // compare
+        stage("Compare With Last Backup"){
+            when { expression { params.Action == 'compare_with_last_backup' }  }
+            steps{
+                script{
+                    dir(env.WORKSPACE) {
+                      runAction(params.Action)
+                    }
+                }
+            }
+        }
+
+    }
+
+    post {
+      success {
+        echo "Success.."
+      }
+
+      failure {
+        echo "Failure.."
+      }
+
+    }
+
+}
+
+// END
