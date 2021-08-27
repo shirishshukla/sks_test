@@ -1,0 +1,51 @@
+// Run shell command in non-debug mode
+def runShellCmd(cmd) {
+   steps.sh (script: '#!/bin/sh -e\n'+ "${cmd}", returnStdout: true,returnStatus: true)
+}
+
+// Run job
+def runBuild(agent, artifactID, version, deployType, DEPLOYMENT_JOB) {
+   def artifactVersion=artifactID+"_"+version
+   //DEPLOYMENT_JOB=JOB_PATH + '/' + artifactID
+
+   dir(env.WORKSPACE + "/" + artifactVersion) {
+       def buildRun=""
+       def result=""
+
+       node(agent){
+           println("Running $deployType Job: $artifactID")
+           buildRun=build job: "${DEPLOYMENT_JOB}", parameters: [
+               string(name: 'ARTIFACT_ID',value: artifactID),
+               string(name: 'ARTIFACT_VERSION',value: artifactVersion),
+               string(name: 'VERSION',value: version),
+               string(name: 'ENABLE_STAGGERED',value: ENABLE_STAGGERED)
+           ], propagate: false
+       }
+
+       def buildResult=buildRun.getResult()
+
+       println('Job: ' + artifactID + ' - ' + buildRun.result)
+
+       result= artifactID + ', ' + version + ', ' + buildRun.absoluteUrl + 'console' + ', ' + buildRun.result
+
+       // Failed Entries
+       def FAILCMD=""
+       if (buildRun.result != 'SUCCESS'){
+           FAILCMD="echo $artifactID=$version | tee -a $FAILED_REPORT_FILE"
+           buildStatus=false
+       }
+
+       // Writing Result to report csv file
+       def CMD="""
+           $FAILCMD
+           echo -e \'${result}\' | tee -a $REPORT_CSV_FILE
+       """
+       runShellCmd(CMD)
+
+   }
+   //return buildStatus
+}
+return this
+
+// end
+
