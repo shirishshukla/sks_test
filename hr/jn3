@@ -1,0 +1,76 @@
+## Master Job:
+pipeline {
+    agent any
+
+    stages {
+        stage('Hello') {
+            steps {
+               script {
+                  dir("$WORKSPACE"){
+                    CHILD_JOB="harika/child_artifact"
+                    ARTIFACT_FILE='mytest.csv'
+                    // build
+                    buildRun=build job: CHILD_JOB, parameters: [
+                        string(name: 'envr',value: 'test')
+                    ], propagate: false
+
+                    def buildResult= buildRun.getResult()
+                    def BUILD_NUMBER= buildRun.getNumber()
+                    println('Job: ' + CHILD_JOB + ', Status: ' + buildRun.result + ', BuildNo: ' + BUILD_NUMBER)
+
+                    copyArtifacts(
+                      filter: ARTIFACT_FILE,
+                      projectName: CHILD_JOB,
+                      fingerprintArtifacts: true,
+                      selector: specific("${BUILD_NUMBER}")
+                    )
+
+                    // cat
+                    sh 'cat mytest.csv'
+
+                    ifHasGood = sh (returnStdout: true, script: "grep GOOD ${ARTIFACT_FILE} 2>&1 > /dev/null && echo success || echo failed").trim()
+                    if (ifHasGood == 'success'){
+                        println('it sud fail as GOOD exist in report file')                      
+                    } else {
+                        println('All BAD report, we are good to go...')
+                    }
+
+                  }
+               }
+            }
+        }
+    }
+}
+
+
+## child Job:
+pipeline {
+    agent any
+
+    stages {
+        stage('Hello') {
+            steps {
+                script {
+                    dir("$WORKSPACE"){
+                        sh "echo $envr,a,d,d,e,d > mytest.csv"
+                        sh "cat mytest.csv"
+                    }
+                }
+            }
+        }
+    }
+    post {
+        success {
+            echo "success..."
+        }
+        failure{
+            echo "failure..."
+        }
+        always {
+            println('Archiveingall *.csv file')
+            archiveArtifacts artifacts: '*.csv'
+        }
+    }
+}
+
+## END
