@@ -1,0 +1,42 @@
+---
+
+image:
+  name: docker:19.03.12 #amazon/aws-cli:latest
+  entrypoint: [""]
+
+include:
+  - local: k8s/Base.loader.gitlab-ci.yml
+
+stages:
+  - initialize
+  - validate
+  - build
+  - deploy
+  - test
+  - cleanup
+
+initialize:
+  extends: .initialize
+
+validate:
+  extends: .validate
+
+build:
+  extends: .build
+
+deploy:
+  extends: .deploy
+  dependencies:
+    - build
+
+test:
+  extends: .test
+  dependencies:
+    - deploy
+
+cleanup:
+  extends: .destroy
+  dependencies:
+    - deploy
+
+## END
