@@ -1,9 +1,9 @@
 ---
-
+​
 ##
 # Description:
 ##
-
+​
 ## Variables
 variables:
   K8S_DIR: "${CI_PROJECT_DIR}/k8s"
@@ -14,10 +14,12 @@ variables:
   REGION: us-west-1
   DEPL_TMPLFILE: deployment.tmpl.yml
   DEPLFILE: deployment.yaml
-  #CONTAINER_REPO: bulkweather
-  #CONTAINER_REGISTRY: "xxxxxxx.dkr.ecr.us-west-1.amazonaws.com"
-
-
+  SECRET_NAME: gitlab-registry-secret
+  DOCKER_HOST: tcp://mydockerhost:2375/
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+​
+​
 # Environment specific variable setup
 .set_env: &set_env
   environment:
@@ -25,37 +27,31 @@ variables:
   variables:
     env_tag: test
     namespace: dep-test
-
-
+​
+​
 # Common Task properties
 .common_config: &common_config
   only:
     - main   # only to run for this branch
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main"
-
-
+​
+# container registry login and build new image
 .docker_login: &docker_login |
-    echo Docker Login To AWS ECR
-    docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-
+    echo Docker Login
+    echo "${CI_REGISTRY_PASSWORD}"  | docker login -u $CI_REGISTRY_USER --password-stdin  $CI_REGISTRY
+    echo done
 
 .build_image: &build_image |
-    echo "Building container image $IMAGE_TAG"
+    echo "Building container image $IMAGE_TAG"
     cd ${CI_PROJECT_DIR}
     docker build -t $IMAGE_TAG .
     docker push $IMAGE_TAG
-
+    docker images​
 
 # setup kubectl and k8s auth
 .set_kubeconfig: &set_kubeconfig |
-    echo Do awscli install
-    curl -L0 "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
-    unzip awscliv2.zip
-    ./aws/install
+    echo Version of awscli...
     aws --version
-    rm -rf awscliv2.zip
-    echo Do kubectl binary
+    echo  Download kubectl binary...
     curl -LO "https://storage.googleapis.com/kubernetes-release/release/$(curl -s https://storage.googleapis.com/kubernetes-release/release/stable.txt)/bin/linux/amd64/kubectl"
     chmod +x kubectl
     mv kubectl /usr/local/bin/
@@ -69,8 +65,9 @@ variables:
     kubectl config view
     kubectl version
     # create secrets
-    kubectl create secret docker-registry gitlab-registry-auth --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$CI_REGISTRY_PASSWORD || true
-
+    kubectl create secret docker-registry SECRET_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$CI_REGISTRY_PASSWORD || true
+​    echo done..
+​
 
 # create deployment file
 .create_depfile: &create_depfile |
@@ -79,26 +76,28 @@ variables:
     cp $DEPL_TMPLFILE $DEPLFILE
     sed -i "s|{{NAMESPACE}}|${namespace}|g" $DEPLFILE
     sed -i "s|{{APP_NAME}}|${APP_NAME}|g" $DEPLFILE
-    sed -i "s|{{CONTAINER_IMAGE}}|${IMAGE_TAG}|g" k8s/deployment.yaml
-    echo xx done xx
+    sed -i "s|{{CONTAINER_IMAGE}}|${IMAGE_TAG}|g" $DEPLFILE
+    sed -i "s|{{SECRET_NAME}}|${SECRET_NAME}|g" $DEPLFILE
+    echo done..
 
-
+​
 # set namespace to current context
 .set_namespace: &set_namespace |
     echo Setting default namespace to $namespace
     kubectl config set-context --current --namespace=$namespace
-    echo done
-
-
-## xxxx Stages xxxx ##
-.initialize: &initialize
-  stage: initialize
-  <<: *set_env
-  <<: *common_config
-  script:
-    - *set_kubeconfig
-
-
+    echo done..
+​
+​
+## **** Stages **** ##
+#.initialize: &initialize
+#  stage: initialize
+#  <<: *set_env
+#  <<: *common_config
+#  script:
+#    - *set_kubeconfig
+​
+​
+# Validate K8s auth
 .validate: &validate
   stage: validate
   <<: *set_env
@@ -108,25 +107,27 @@ variables:
     - *create_depfile
     - cd ${K8S_DIR}
     - kubectl get namespaces && echo kubectl auth working ... || (echo "FAIL - kubectl auth failed." && exit 1)
-    - kubectl get namespaces $namespace || (echo namespace $namespace not exist && exit 1)
     - echo Below deployment to be created ...
     - echo xxxxxxxxxxxxxxxx deployment file xxxxxxxxxxxxxxxx
     - cat -n $DEPLFILE
     - echo xxxxxxxxxxxxxxxx END xxxxxxxxxxxxxxxx
     - echo Validate deployment file $DEPLFILE ...
     - kubectl apply -f $DEPLFILE --dry-run=client -n $namespace
-
-
-# build image
+​
+​
+# build and push docker image
 .build: &build
   stage: build
+  image: docker:19.03.12
+​  services:
+   - name: docker:dind
+     alias: mydockerhost
   <<: *set_env
   <<: *common_config
   script:
-    - *set_kubeconfig
     - *docker_login
     - *build_image
-
+​
 
 # create namespace and apply manifest
 .deploy: &deploy
@@ -139,11 +140,12 @@ variables:
     - echo create namespace if not exist ...
     - kubectl get namespaces
     - kubectl describe namespace $namespace || kubectl create namespace $namespace
+    - kubectl get namespaces $namespace || (echo namespace $namespace not exist && exit 1)
     - *set_namespace
     - cd ${K8S_DIR}
     - kubectl apply -f $DEPLFILE
-
-
+​
+​
 # test
 .test: &test
   stage: test
@@ -155,18 +157,8 @@ variables:
     - cd ${K8S_DIR}
     - echo Validating pod
     - kubectl get pods | grep ${APP_NAME}
-    #- kubectl get service ${APP_NAME}
-    #- |
-    #    for cnt in {1..10}; do
-    #      echo RETRY: $cnts
-    #      LBURL=$(kubectl get svc ${APP_NAME} | awk '/LoadBalancer/ {print $4}')
-    #      [ ! -z $LBURL ] && break
-    #      sleep 6
-    #    done
-    #    echo Load Balancer URL : http://$LBURL
-    #    [ ! -z $LBURL ] && curl -L $LBURL && echo SUCCESS || (echo FAILED TO GET LB IP && exit 1)
 
-
+​
 # destroy
 .destroy: &destroy
   stage: cleanup
@@ -181,5 +173,5 @@ variables:
     - echo Deleting deployment cleanup ...
     - kubectl delete -f $DEPLFILE
     - echo Cleanup is successfull ..
-
+​
 ## END
