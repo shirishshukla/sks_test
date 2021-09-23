@@ -1,0 +1,58 @@
+pipeline {
+
+	environment {
+    PY_SCRIPT = 'db_query_runner.py'
+    DB_MAPPING_FILE = 'db_mapping_info.yaml'
+
+  }
+
+  parameters {
+    choice(name: 'Database',   choices: ['mongodb1', 'mongodb2'], description: 'Select Desired Database')
+  }
+
+  // stages main
+  stages {
+    stage('stage1'){
+      steps {
+        script {
+          println('stage-1')
+          sh "python ./${PY_SCRIPT}"
+        }
+      }
+    }
+
+    stage('stage1'){
+      steps {
+        script {
+          println('stage-1')
+        }
+      }
+    }
+
+  } // END STAGES
+
+  post {
+    success {
+      script {
+        echo 'Success'
+      }
+    }
+
+    failure {
+      script {
+        echo 'Failed'
+      }
+    }
+
+    }
+    always{
+      script {
+        echo "always.."
+      }
+    }
+
+  }
+
+}
+
+//end pipeline

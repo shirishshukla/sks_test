@@ -1,0 +1,12 @@
+db_info:
+  - name: testdb1
+    db_type: mongodb
+    collection_name: state_machines
+    db_url: http://mydb1:27001
+    db_query_file: testdb1.query
+  - name: testdb2
+    db_type: db2
+    db_url: http://mydb2:27002
+    db_query_file: testdb2.query
+
+## END

@@ -65,7 +65,7 @@ variables:
     kubectl config view
     kubectl version
     # create secrets
-    kubectl create secret docker-registry SECRET_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$CI_REGISTRY_PASSWORD || true
+    kubectl create secret docker-registry $SECRET_NAME --docker-server=$CI_REGISTRY --docker-username=$CI_REGISTRY_USER --docker-password=$CI_REGISTRY_PASSWORD || true
 ​    echo done..
 ​
 
