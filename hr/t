@@ -1,7 +1,7 @@
 #!/bin/bash
 
 cleanupFolder='/appllogs/backup/'
-emailTO='chandru.perumal@cvshealth.com'
+emailTO='xxxxx'
 emailTxtFile='/tmp/email_text.txt'
 cleanupFilesList='/tmp/clean_files.txt'
 
