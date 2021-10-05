@@ -1,0 +1,160 @@
+#!/usr/bin/groovy
+
+///////
+// Description:
+/////
+
+def agentName="SPRx2.0_DEPLOY-ONLY"
+
+// Execute Action
+def runScript(runFor){
+    def scriptContent = readFile file: CLEANUP_SCRIPT_FILE
+    if (runFor == 'server'){
+      echo "Server List: $server_name"
+      sh (script: "scp -rp  $CLEANUP_SCRIPT_FILE ${SSH_USER}@${server_name}:/tmp/ || echo CLEANUP FAILED", returnStdout: false)
+      RESULT= sh (script: "ssh -T ${SSH_USER}@${server_name} \'sh /tmp/$CLEANUP_SCRIPT_FILE $server_name $CLEANUP_FOLDER\' || echo CLEANUP FAILED", returnStdout: true)
+
+      if (RESULT.contains('CLEANUP FAILED')){
+        env.SCRIPT_STATUS='FAILED'
+      }
+      sh "echo -e $RESULT > $REPORT_FILE"
+    }
+    if (runFor == 'environment'){
+      // get list of server for environment
+      envPropFile = readProperties file: ENV_SRV_MAPPING_FILE
+      envServerList = envPropFile."${environment}"
+      echo "Server List: $envServerList"
+      envServerList.split(',').each { SERVER_NAME ->
+        sh (script: "scp -rp  $CLEANUP_SCRIPT_FILE ${SSH_USER}@${SERVER_NAME}:/tmp/ || echo CLEANUP FAILED", returnStdout: false)
+        RESULT= sh (script: "ssh -T ${SSH_USER}@${SERVER_NAME} \'sh /tmp/$CLEANUP_SCRIPT_FILE $SERVER_NAME $CLEANUP_FOLDER\' || echo CLEANUP FAILED", returnStdout: true)
+        if (RESULT.contains('CLEANUP FAILED')){
+          env.SCRIPT_STATUS='FAILED'
+        }
+        println(RESULT)
+        sh "echo -e \"$RESULT\" >> $REPORT_FILE"
+      }
+    }
+}
+
+
+// Pipeline
+pipeline{
+
+    // agent
+    agent{
+        label agentName
+    }
+
+    // Triggers  cron
+    //triggers {
+    //    cron('00 03 * * * \n00 04 * * *')
+    //}
+
+    // environments
+    environment{
+        ENV_SRV_MAPPING_FILE     = 'env_mapping.properties'
+        CLEANUP_SCRIPT_FILE      = 'cleanup_script.v2.sh'
+        SSH_USER                 = 'devops'
+        CLEANUP_FOLDER           = '/appllogs/backup/'
+        NOTIFY_TO_EMAIIDS        = 'xxx.xx@xxxxx.com'  // ad-here emailid
+        REPORT_FILE              = "$WORKSPACE/.RESULT.out"
+        SCRIPT_STATUS            = 'Success'
+    }
+
+   // parameters
+    parameters {
+      // Server hostname
+      string(name: 'server_name',  defaultValue: '', description: 'Enter Server Name')
+
+      // Environment
+      string(name: 'environment',  defaultValue: 'test', description: 'Enter Environment Name')
+
+      // Execute stages or just load Jenkins file
+      // booleanParam(name: "skip_builds", defaultValue: false, description: "Select to skip builds stages, just load Jenkinsfile")
+    }
+
+    stages {
+
+        // Clean  WORKSPACE
+        stage("Clean WS") {
+            steps {
+                step([$class: 'WsCleanup'])
+            }
+        }
+
+        // Checkout GIT REPO
+        stage("Checkout") {
+            steps{
+                checkout scm
+            }
+        }
+
+        // Stages
+        stage("Run FS Cleanup Script") {
+            //when { expression { params.skip_builds } }
+            steps {
+                script {
+                    dir("$WORKSPACE/hr/clnp") {
+                        sh "cat > $REPORT_FILE"
+                        sh "ls -l"
+                        sh "whoami"
+                        if (params.server_name != ''){
+                              runScript('server')
+                        } else {
+                          if (params.environment != '') {
+                              runScript('environment')
+                          } else {
+                            echo "No match..."
+                          }
+                        }
+
+                    }
+                }
+            }
+        }
+        stage("Preapre Email Notification Content"){
+            //when { expression { params.skip_builds } }
+            steps {
+                script {
+                    dir("$WORKSPACE/hr/clnp") {
+                        REPORT_HEADER= "<html><body>"
+                        REPORT_BODY= sh(script: "cat ${REPORT_FILE}", returnStdout: true).trim()
+                        REPORT_FOOTER= "</body></html>"
+                        EMAIL_CONTENT= REPORT_HEADER + REPORT_BODY + REPORT_FOOTER
+                        EMAIL_SUBJECT= "${SCRIPT_STATUS}: File System Log Cleanup"
+
+                        // Send Email Notification
+                        emailext(
+                          attachmentsPattern: REPORT_FILE,
+                          mimeType: 'text/html',
+                          body: EMAIL_CONTENT,
+                          subject: EMAIL_SUBJECT,
+                          to: NOTIFY_TO_EMAIIDS
+                        )
+                        //echo "$EMAIL_SUBJECT: $EMAIL_CONTENT"
+
+                        // Mark Build Status
+                        if (SCRIPT_STATUS == 'FAILED'){
+                            currentBuild.result = 'FAILURE'
+                        }
+                    }
+                }
+            }
+        }
+
+    }
+
+    post {
+      success {
+        echo "Success.."
+      }
+
+      failure {
+        echo "Failure.."
+      }
+
+    }
+
+}
+
+// END
