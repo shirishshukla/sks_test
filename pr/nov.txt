@@ -8,7 +8,7 @@ if(output_collections =~ 'installing'){
   if(output_collections =~ 'is already installed'){
     echo "Collection Installed Successfully mentioned in roles/requirements.txt, refer $BUILD_URL for more details"
   } else {
-    failuremsg = "Collection Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD URL} for more details"
+    failuremsg = "Collection Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD_URL} for more details"
     error("${failuremsg}")
   }
 }
@@ -17,7 +17,7 @@ else if(output_collections =~ 'is already installed'){
 } else {
   echo "Collection Installation Result:"
   sh "echo $output_collections"
-  failuremsg = "Collection Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD URL} for more details"
+  failuremsg = "Collection Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD_URL} for more details"
   error("${failuremsg}")
 }
 
@@ -31,6 +31,6 @@ else if (output_roles =~ 'is already installed'){
 } else {
     echo "Roles Installation Result:"
     sh "echo $output_roles"
-    failuremsg = "Roles Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD URL} for more details"
+    failuremsg = "Roles Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD_URL} for more details"
     error("${failuremsg}")
 }
