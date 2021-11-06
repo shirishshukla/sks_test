@@ -11,9 +11,14 @@ if(output_collections =~ 'installing'){
     failuremsg = "Collection Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD URL} for more details"
     error("${failuremsg}")
   }
+}
+else if(output_collections =~ 'is already installed'){
+  echo "Collection Already Installed mentioned in roles/requirements.txt, refer $BUILD_URL for more details"
 } else {
   echo "Collection Installation Result:"
   sh "echo $output_collections"
+  failuremsg = "Collection Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD URL} for more details"
+  error("${failuremsg}")
 }
 
 // Roles Installation Validation
