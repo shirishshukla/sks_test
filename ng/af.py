@@ -58,7 +58,7 @@ if __name__ == "__main__":
     DATEINPUT=sys.argv[2] # in MMDDYY format
     TARGET_PATH = '/'.join([ARTIFACTORY_URL, str(EID), str(DATEINPUT)])
 
-    print('ARTIFACTORY URL:', ARTIFACTORY_URL)
+    print('ARTIFACTORY URL:', TARGET_PATH)
     uploadToArtifactory(artifactName, TARGET_PATH)
 
 
