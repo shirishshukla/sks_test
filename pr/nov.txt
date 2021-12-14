@@ -4,21 +4,21 @@ output_roles = "${sh(returnStdout: true, script: 'ansible-galaxy install -r role
 // Collection Installation Validation
 output_collections=output_collections.toLowerCase()
 if(output_collections =~ 'installing'){
-  output_collections = "${sh(returnStdout: true, script: 'grep ^collections: roles/requirements.yml && ansible-galaxy collection install -r roles/requirements.yml -p collections/ > install_collections_out.txt 2>&1')}"
-  if(output_collections =~ 'is already installed'){
-    echo "Collection Installed Successfully mentioned in roles/requirements.txt, refer $BUILD_URL for more details"
-  } else {
-    failuremsg = "Collection Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD_URL} for more details"
-    error("${failuremsg}")
-  }
+    output_collections = "${sh(returnStdout: true, script: 'grep ^collections: roles/requirements.yml && ansible-galaxy collection install -r roles/requirements.yml -p collections/ > install_collections_out.txt 2>&1')}"
+    if(output_collections =~ 'is already installed'){
+        echo "Collection Installed Successfully mentioned in roles/requirements.txt, refer $BUILD_URL for more details"
+    } else {
+        failuremsg = "Collection Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD_URL} for more details"
+        error("${failuremsg}")
+    }
 }
 else if(output_collections =~ 'is already installed'){
-  echo "Collection Already Installed mentioned in roles/requirements.txt, refer $BUILD_URL for more details"
+    echo "Collection Already Installed mentioned in roles/requirements.txt, refer $BUILD_URL for more details"
 } else {
-  echo "Collection Installation Result:"
-  sh "echo $output_collections"
-  failuremsg = "Collection Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD_URL} for more details"
-  error("${failuremsg}")
+    echo "Collection Installation Result:"
+    sh "echo $output_collections"
+    failuremsg = "Collection Installed FAILURE, Something went wrong with the requirements.yml file. Please check install_collections_out.txt file in artifacts of current build ${BUILD_URL} for more details"
+    error("${failuremsg}")
 }
 
 // Roles Installation Validation
