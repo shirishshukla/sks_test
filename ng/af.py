@@ -53,6 +53,7 @@ if __name__ == "__main__":
             Invalid Input Paramameters
             Syntax: python script.py EID MMDDYY
         """)
+        sys.exit(1)
     EID=sys.argv[1]
     DATEINPUT=sys.argv[2] # in MMDDYY format
     TARGET_PATH = '/'.join([ARTIFACTORY_URL, str(EID), str(DATEINPUT)])
