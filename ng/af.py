@@ -25,25 +25,25 @@ def uploadToArtifactory(artifactName, TARGET_PATH):
                    'X-Checksum-Sha1': hashlib.sha1(open(artifactName).read()).hexdigest()
                 }
 
+        print()
         # upload
-        with open(artifactName, 'rb') as artifact:
-            ret = requests.put(TARGET_PATH,
-                            auth=(AF_USERNAME, AF_PASSWORD),
-                            data=artifact, headers=HEADERS
-                )
+        #with open(artifactName, 'rb') as artifact:
+        #    ret = requests.put(TARGET_PATH,
+        #                    auth=(AF_USERNAME, AF_PASSWORD),
+        #                    data=artifact, headers=HEADERS
+        #        )
 
-        # validate
-        STATUS_CODE=ret.status_code
-        if STATUS_CODE != 201:
-            print("Something went wrong, status code: ", STATUS_CODE)
-        else:
-            print("Successfully uploaded artifact {}, available at url: {}".format(artifactName, ret.json()['downloadUri']))
-            return True
+        ## validate
+        #STATUS_CODE=ret.status_code
+        #if STATUS_CODE != 201:
+        #    print("Something went wrong, status code: ", STATUS_CODE)
+        #else:
+        #    print("Successfully uploaded artifact {}, available at url: {}".format(artifactName, ret.json()['downloadUri']))
+        #    return True
     except Exception as err:
         print('Failed with error: {}'.format(str(err)))
 
     return False
-
 
 
 ## main function call

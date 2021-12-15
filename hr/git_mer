@@ -1,0 +1,82 @@
+#!/usr/bin/groovy
+
+properties([
+  parameters([
+    string(name: 'git_repo_url', defaultValue: 'https://....your-repo.....git', description: 'GIT Repo URL'),
+    string(name: 'git_src_branch', defaultValue: 'qa', description: 'GIT Source Branch Name'),
+    string(name: 'git_dest_branch', defaultValue: 'dev', description: 'GIT Destination Branch Name to be merged to src_branch'),
+    choice(name: "git_action", choices: ["merge", "merge_delete"], description: "choose the appropriate merge action")
+  ])
+])
+
+pipeline{
+    environment{
+        git_credentialId= '3e38e78b-df56-4861-95f1-f084e03f93f5'
+        git_co_dir= 'git_tmp_dir'
+    }
+
+    agent{
+        label "SPRx2.0_DEPLOY-ONLY"
+    }
+    //agent any
+
+    // Stages
+    stages{
+
+        stage("Clean WS"){
+            steps{
+                step([$class: 'WsCleanup'])
+            }
+        }
+
+        stage("Checkout"){
+            steps{
+                script {
+                      println("Git Checkout ${git_repo_url}")
+                      checkout([
+                          $class: 'GitSCM',
+                          branches: [[name: "${git_src_branch}"]],
+                          extensions: [[$class: 'RelativeTargetDirectory', relativeTargetDir:  "${env.git_co_dir}"]],
+                          userRemoteConfigs: [[credentialsId: "${env.git_credentialId}", url: "${git_repo_url}" ]]
+                      ])
+                }
+           }
+        }
+
+        stage("GIT Merge"){
+            steps{
+                script {
+                  dir("${env.git_co_dir}"){
+                      println("Merging Branch ${git_dest_branch} to ${git_src_branch}")
+                      //withCredentials([gitUsernamePassword(credentialsId: "${env.git_credentialId}", gitToolName: 'git-tool')]) {
+                        sh """
+                          git fetch --all
+                          git checkout --track ${git_src_branch}
+                          git merge ${git_dest_branch}
+                          git commit -am "GIT Merge from branch ${git_dest_branch}. Auto-CheckIn by Jenkins Build#: ${BUILD_NUMBER}"
+                          git push origin HEAD
+                        """
+                        if(git_action == "merge_delete"){
+                          println("Deleting branch ${git_dest_branch}")
+                          sh "git push origin --delete ${git_dest_branch}"
+                        }
+                      //}
+                  }
+                }
+            }
+        }
+    }
+    post {
+        success {
+            println("Pipeline Successfull")
+        }
+        failure {
+            println("Pipeline FILED")
+        }
+        cleanup {
+            cleanWs()
+        }
+    }
+}
+
+// end
