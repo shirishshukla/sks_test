@@ -1,0 +1,56 @@
+//
+
+properties([
+  parameters([
+    string(name: "name1", defaultValue: "sai", description: "name1"),
+    choice(name: "name2", choices: ["sai", "shirish", "ajay"], description: "name2"),
+  ])
+])
+
+pipeline {
+    agent any
+
+    environment {
+        USERNAME1 = 'shirish'
+        USERNAME = 'shirish1'
+    }
+
+    stages {
+
+        stage('stage1') {
+          environment {
+              USERNAME = 'shirish2'
+          }
+          steps {
+            script {
+                echo "Hello $name1 -- $name2"
+                println("hello: $USERNAME")
+            }
+          }
+        }
+
+        stage("stage2") {
+          steps {
+              script{
+                sh """
+                    touch /tmp1/${USERNAME}
+                """
+                RESULT= sh (script: "ls /tmp/", returnStdout: true)
+                println("Result $RESULT")
+              }
+          }
+        }
+    }
+
+    post {
+        success {
+            println('Status: ')
+        }
+        failure {
+            echo 'failure'
+        }
+        always {
+            echo 'always'
+        }
+    }
+}
