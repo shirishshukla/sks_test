@@ -4,21 +4,18 @@ stages:
   - build
   - validate
 
-Variables:
+variables:
   IIS_PATH: E:\Apps\CFR
   RUNNER_TAG: win_test_mig
 
-.common_config: &common_config
-  only:
-    - master    # run for this branch only
-    #- tags
-    #- merge_requests # on merge req only
-  tags: # run on this matched runner
-    - "${RUNNER_TAG}"
+.common_config: &common_config
+  only:
+    - master
+  tags:
+    - ${RUNNER_TAG}
 
-
-docker_build:
-  stage: build
+dockerbuild:
+  stage: build
   <<: *common_config
   script:
     - docker build --output -o docker_build_artifact .
@@ -28,7 +25,7 @@ docker_build:
     - echo Success
 
 validate:
-  stage: build
+  stage: validate
   <<: *common_config
   script:
     - echo contents of ${IIS_PATH}
