@@ -12,7 +12,7 @@ variables:
   only:
     - master
   tags:
-    - ${RUNNER_TAG}
+    - "${RUNNER_TAG}"
 
 dockerbuild:
   stage: build
