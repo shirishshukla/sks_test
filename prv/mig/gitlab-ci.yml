@@ -1,0 +1,36 @@
+---
+
+stages:
+  - build
+  - validate
+
+Variables:
+  IIS_PATH: E:\Apps\CFR
+  RUNNER_TAG: win_test_mig
+
+.common_config: &common_config
+  only:
+    - master    # run for this branch only
+    #- tags
+    #- merge_requests # on merge req only
+  tags: # run on this matched runner
+    - "${RUNNER_TAG}"
+
+
+docker_build:
+  stage: build
+  <<: *common_config
+  script:
+    - docker build --output -o docker_build_artifact .
+    - dir docker_build_artifact
+    - echo Copy Artifact to ${IIS_PATH}
+    - cp -r docker_build_artifact/* ${IIS_PATH}
+    - echo Success
+
+validate:
+  stage: build
+  <<: *common_config
+  script:
+    - echo contents of ${IIS_PATH}
+    - dir ${IIS_PATH}
+    - echo done
