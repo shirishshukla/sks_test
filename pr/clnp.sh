@@ -1,0 +1,42 @@
+- hosts: nodegrp
+  gather_facts: false
+  vars:
+    mtime_val: "{{ cleanup_age|default(5) }}"
+    target_dir: "{{ target_directory }}"
+  tasks:
+    - name: "Is {{ target_dir }} exist ?"
+      stat:
+        path: "{{ target_dir }}"
+      register: isexist
+
+    - assert:
+        that:
+           - isexist.stat.exists
+           - isexist.stat.isdir
+        fail_msg: "FAIL: Cleanup dir {{ target_dir }} not exist."
+        success_msg: "Cleanup dir {{ target_dir }} exist."
+
+    - name: Find dirs to be clenup
+      command: find {{ target_dir }} -type d -mtime +{{ mtime_val }}
+      register: dir2del
+      when:
+         - isexist.stat.isdir
+
+    - name: Cleanup task
+      shell: |
+         ls -ld {{ dir_nm }}
+      loop: "{{ dir2del.stdout_lines }}"
+      loop_control:
+        loop_var: dir_nm
+      register: final_out
+
+    - set_fact:
+        post_msg: "{{ post_msg|default(['--> Below dirs are deleted..']) | union(item.stdout_lines) }}"
+      no_log: yes
+      loop: "{{ final_out.results }}"
+
+
+    - debug:
+        msg:
+          - "{{ post_msg }}"
+      when: post_msg|default([]) != []
