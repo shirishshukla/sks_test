@@ -1,3 +1,15 @@
+- hosts: localhost
+  gather_facts: false
+  name: "get all nodes"
+  tasks:
+    - name: node list
+      add_host:
+        name: "{{ item }}"
+        groups: nodegrp
+        ansible_ssh_user: root
+        ansible_ssh_private_key_file: /Users/shirish/.ssh/id_rsa
+      with_items: "{{ nodes|split(',') }}"
+
 - hosts: nodegrp
   gather_facts: false
   vars:
