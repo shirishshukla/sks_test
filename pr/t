@@ -1,0 +1,49 @@
+---
+
+stages:
+  - build
+  - validate
+
+variables:
+  IIS_PATH: E:\Apps\CFR
+  RUNNER_TAG: win_test_mig
+  CONFIG_FILE: 'Web.config'
+  BlockStorageAccountName: 'devfilecache'
+  BlockStorageKey: 'CPuaR+EOEIvEVtOdZd5TRQ3VFQSK/NGgxLvdhPKc7qcS+4+Gn+rbTdmpMlpZqJDI9WcS8SAMkszuEaZbWTpSig=='
+  RedisConnectionString: 'R365Dev001.redis.cache.windows.net:6380,password=hYk3yBCmjhRNRtaBR8yuHpNNotE9g9+MY96RjAwxJAQ=,syncTimeout=20000,ssl=True,abortConnect=False'
+  RedisnodeURL: 'http://search-ingest.r365.io:9200'
+  ESIndexFormat: 'r365-customfinancials-dev'
+
+.common_config: &common_config
+  only:
+    - master    # run for this branch only
+    #- tags
+    #- merge_requests # on merge req only
+  tags: # run on this matched runner
+    - "${RUNNER_TAG}"
+
+
+docker_build:
+  stage: build
+  <<: *common_config
+  script:
+    - echo Modify config in file ${CONFIG_FILE}
+    - ./modify_config.ps1 -key blockStorageAccountName -value $BlockStorageAccountName -xmlfile $CONFIG_FILE
+    - ./modify_config.ps1 -key blockStorageKey -value $BlockStorageKey -xmlfile $CONFIG_FILE
+    - ./modify_config.ps1 -key RedisConnectionString -value $RedisConnectionString -xmlfile $CONFIG_FILE
+    - ./modify_config.ps1 -key serilog:write-to:Elasticsearch.nodeUris -value $RedisnodeURL -xmlfile $CONFIG_FILE
+    - ./modify_config.ps1 -key serilog:write-to:Elasticsearch.indexFormat -value $ESIndexFormat -xmlfile $CONFIG_FILE
+    - docker build -t tempapp:latest .
+    - docker rmi tempapp -ErrorAction SilentlyContinue
+    - docker run -v %cd%\out:/mnt --name tempapp tempapp:latest cp -rp app mnt/
+    - echo Copy Artifact to ${IIS_PATH}
+    - cp -r out\* ${IIS_PATH}\
+    - echo Success
+
+validate:
+  stage: build
+  <<: *common_config
+  script:
+    - echo contents of ${IIS_PATH}
+    - dir ${IIS_PATH}
+    - echo done

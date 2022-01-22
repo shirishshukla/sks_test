@@ -1,0 +1,16 @@
+EC2LaunchTemplate:
+  Type: AWS::EC2::LaunchTemplate
+  Properties:
+    LaunchTemplateName: !Sub ${AWS::StackName}-launch-template
+    LaunchTemplateData:
+      MetadataOptions:
+        HttpEndpoint: enabled
+        HttpTokens: required
+
+EC2Instance1:
+  Type: AWS::EC2::Instance
+  Properties:
+    LaunchTemplate:
+      LaunchTemplateId: !Ref EC2LaunchTemplate
+      Version: !GetAtt EC2LaunchTemplate.DefaultVersionNumber
+    InstanceType: !Ref ParamInstanceType
