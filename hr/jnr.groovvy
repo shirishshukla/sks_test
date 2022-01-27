@@ -1,0 +1,257 @@
+def agentName="SPRx2.0_DEPLOY-ONLY"
+
+pipeline {
+
+    agent {
+        label agentName
+    }
+
+    environment {
+        VALIDATION_STATUS =null
+        buildstatus =null
+        ENVIRONMENT =null
+    }
+
+    stages {
+        stage('Parameters'){
+            steps {
+                script {
+                properties([
+                        parameters([
+                            [$class: 'ChoiceParameter',
+                                choiceType: 'PT_SINGLE_SELECT',
+                                description: 'Select the ENVIRONMENT from the Dropdown List',
+                                filterLength: 1,
+                                filterable: false,
+                                name: 'ENVIRONMENT',
+                                script: [
+                                    $class: 'GroovyScript',
+                                    fallbackScript: [
+                                        classpath: [],
+                                        sandbox: true,
+                                        script:
+                                            "return['Could not get The ENVIRONMENTs']"
+                                    ],
+                                    script: [
+                                        classpath: [],
+                                        sandbox: true,
+                                        script:
+                                            "return['DEV-P','DEV-0','DEV-1','DEV-2','DEV-3','DEV-4','DEV-5','AZSIT-1','AZSIT-2','AZSIT-3','SIT-P','SIT-0','SIT-1','SIT-2','SIT-3','SIT-4','SIT-5','UAT-0','UAT-1','UAT-2','UAT-3','UAT-4','UAT-5']"
+                                    ]
+                                ]
+                            ]
+                        ])
+                    ])
+                }
+            }
+        }
+
+        stage('prepare environment'){
+          steps{
+              script {
+                  env.ENVIRONMENT = "${params.ENVIRONMENT}"
+                  serverProperties = readProperties file: "${env.WORKSPACE}"+"/redis.properties"
+                  servers = serverProperties["${ENVIRONMENT}"]
+                  env.SERVERS_LIST = "${servers}".trim().split(',')
+                  println('\nEnvironment:', ENVIRONMENT, '\nServer List:', servers_list )
+              }
+          }
+        }
+
+        stage('check_sentinel_status') {   // check redis sentinel process status on all servers and start if not running
+            steps {
+                script {
+                    SERVERS_LIST.each() { SERVER ->
+                        print('Server: ', SERVER)
+                        dir(env.workspace){
+                          def sentinelprocess =  sh (script: "ssh -q -T devops@${SERVER}  ' ps -aef | grep redis | grep sentinel ' ", returnStdout: true) ///????
+                          def sentinelprocs = sentinelprocess.readLines()
+                          println sentinelprocs.size()
+                          if (sentinelprocs.size() == 1) {
+                              println 'sentinel not running, starting..'
+                              sh "ssh  -T -n devops@${SERVER} 'sh /applredis/sentinel.sh' "
+                          }
+                        }
+                    }
+                }
+            }
+        }
+
+        stage('check_the_status'){  // Checking redis status on server 1
+            steps{
+                script {
+                    def ip = "${SERVERS_LIST[0]}"  // on first server
+                    println ip
+                    dir(env.workspace){
+                        def ret = sh (script: "ssh -q -T devops@${ip}  ' sh /appl/software/redis-5.0.8/src/validation-master.sh || true ' ", returnStdout: true)
+                        env.return = ret
+                        println  ret
+                        def lines = ret.readLines()
+                        def redis1_map = [:]
+                        for (line in lines){
+                            println "the line is ${line}"
+                            def node = "${line}".split()
+                            redis1_map.put(node[1],node[0])
+                            println node[1]
+                        }
+                        println redis1_map
+                        env.redis1 = redis1_map.sort()
+                        println (redis1.size())
+                        println (redis1_map.size())
+                        if ((redis1_map.size())== 6){
+                            VALIDATION_STATUS ="PASSED"
+                            println "the nodes have started successfully"
+                        }
+                        else {
+                            VALIDATION_STATUS ="NOTSTARTED"
+                            println "Starting of redis nodes will start shortly"
+                        }
+                    }
+                }
+            }
+        }
+
+        // check master slave status on each nodes both sud be running
+        stage('check master slave status on each nodes'){
+            steps{
+                script {
+                    def master_port = 6379
+                    def slave_port = 6380
+                    VALIDATION_STATUS ="PASSED"
+                    dir(env.workspace){
+                      SERVERS_LIST.each() { SERVER ->
+                        def ret = sh (script: "ssh -q -T devops@${SERVER}  'sh /appl/software/redis-5.0.8/src/validation-master.sh || true'", returnStdout: true)
+                        def lines = ret.readLines()
+                        def isMaster = false
+                        def isSlave = false
+                        for (line in lines){
+                            if (line.contains(SERVER)) { // only for line contains server ip
+                              println("Line: ${line}")
+                              def entry = "${line}".split()
+                              def serial_number = entry[0]
+                              def node_ip = entry[1].split(':')[0]
+                              def node_port = entry[1].split(':')[1].split('@')[0]
+                              def srv_type = entry[2]
+                              if (node_port == master_port){
+                                  isMaster = true
+                              }
+                              if (node_port == slave_port){
+                                  isSlave = true
+                              }
+                            }
+                        }
+                        if (isMaster and isSlave){
+                            print("Master and Slave services Running on node: $SERVER")
+                        }
+                        else {
+                            def RET = ''
+                            if (not isMaster){
+                                RET += 'Master '
+                            }
+                            if (not isSlave){
+                                RET += 'Slave '
+                            }
+                            print("$RET services NOT Running on node: $SERVER")
+                            VALIDATION_STATUS ="NOTSTARTED"
+                        }
+                      }
+                    }
+                }
+            }
+        }
+
+        // Start Redis master
+        stage('Master_start'){
+            when { expression { VALIDATION_STATUS == "NOTSTARTED" } }
+            steps{
+              script{
+                  SERVERS_LIST.each() { SERVER ->
+                      dir(env.workspace){
+                          def processes = sh (script: "ssh -q -T devops@${SERVER}  ' ps -aef | grep redis ' ", returnStdout: true)
+                          println processes
+                          // kill processes
+                          for (process in process.readLines()){
+                              def redisprocess = "${process}".split()
+                              sh "ssh  -T -n devops@${SERVER} 'kill -9 ${redisprocess[1]} || true' "
+                          }
+                          // Start master service
+                          sh "ssh -T -n devops@${SERVER} 'sh /applredis/master.sh' "
+                      }
+                  }
+              }
+            }
+        }
+
+        // Start Redis Slave
+        stage('Slave_start'){
+            when { expression{ VALIDATION_STATUS == "NOTSTARTED" } }
+            steps{
+              script {
+                  SERVERS_LIST.each() { SERVER ->
+                      dir(env.workspace){
+                          sh "ssh -T -n devops@${it} 'sh /applredis/slave.sh'"
+                      }
+                  }
+              }
+            }
+        }
+
+        // Compare redis status
+        stage('compare_the_status'){
+            steps{
+              script{
+                  def ip = "${SERVERS_LIST[0]}" // on first server
+                  dir(env.workspace){
+                      def ret = sh (script: "ssh -q -T devops@${ip}  ' sh /appl/software/redis-5.0.8/src/validation-master.sh || true ' ", returnStdout: true)
+                      env.return = ret
+                      println  ret
+                      def lines = ret.readLines()
+                      def redis1_map = [:]
+                      for (line in lines){
+                          println "the line is ${line}"
+                          def node = "${line}".split()
+                          redis1_map.put(node[1],node[0])
+                          println node[1]
+                      }
+                      println redis1_map
+                      env.redis1 = redis1_map.sort()
+                  } //server1: {datat11.2.2.2}
+
+                  // on all server and compare
+                  SERVERS_LIST.each() { SERVER ->
+                      print('Server: ', SERVER)
+                      dir(env.workspace){
+                          def ret = sh (script: "ssh -q -T devops@${SERVER}  ' sh /appl/software/redis-5.0.8/src/validation-master.sh ' ", returnStdout: true)
+                          env.return = ret
+                          println  ret
+                          def lines = ret.readLines()
+                          def redis2_map = [:]
+                          for (line in lines){
+                              println "the line is ${line}"
+                              def node = "${line}".split()
+                              redis2_map.put(node[1],node[0])
+                              println node[1]
+                          }
+                          println redis2_map
+                          env.redis2 = redis2_map.sort()
+
+                          if(redis1.equals(redis2)) {
+                              println "this nodes are correct"
+                              buildstatus = "success"
+                          } else {
+                              buildstatus = "failure"
+                              error("build failed for wrong number of nodes")
+                          }
+                      }
+                  }
+                }
+            }
+        }
+
+    } // end stages
+
+   // POST ADD HERE ..
+
+}
+
+//// END ////
