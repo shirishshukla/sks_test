@@ -53,7 +53,7 @@ pipeline {
                   serverProperties = readProperties file: "${env.WORKSPACE}"+"/redis.properties"
                   servers = serverProperties["${ENVIRONMENT}"]
                   env.SERVERS_LIST = "${servers}".trim().split(',')
-                  println('\nEnvironment:', ENVIRONMENT, '\nServer List:', servers_list )
+                  println("\nEnvironment: ${ENVIRONMENT} \nServer List: ", SERVERS_LIST)
               }
           }
         }
