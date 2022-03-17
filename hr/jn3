@@ -1,76 +1,321 @@
-## Master Job:
+def agentName="SPRx2.0_DEPLOY-ONLY"
+
 pipeline {
-    agent any
 
-    stages {
-        stage('Hello') {
-            steps {
-               script {
-                  dir("$WORKSPACE"){
-                    CHILD_JOB="harika/child_artifact"
-                    ARTIFACT_FILE='mytest.csv'
-                    // build
-                    buildRun=build job: CHILD_JOB, parameters: [
-                        string(name: 'envr',value: 'test')
-                    ], propagate: false
-
-                    def buildResult= buildRun.getResult()
-                    def BUILD_NUMBER= buildRun.getNumber()
-                    println('Job: ' + CHILD_JOB + ', Status: ' + buildRun.result + ', BuildNo: ' + BUILD_NUMBER)
-
-                    copyArtifacts(
-                      filter: ARTIFACT_FILE,
-                      projectName: CHILD_JOB,
-                      fingerprintArtifacts: true,
-                      selector: specific("${BUILD_NUMBER}")
-                    )
-
-                    // cat
-                    sh 'cat mytest.csv'
-
-                    ifHasGood = sh (returnStdout: true, script: "grep GOOD ${ARTIFACT_FILE} 2>&1 > /dev/null && echo success || echo failed").trim()
-                    if (ifHasGood == 'success'){
-                        println('it sud fail as GOOD exist in report file')                      
-                    } else {
-                        println('All BAD report, we are good to go...')
-                    }
-
-                  }
-               }
-            }
-        }
+    agent {
+        label agentName
     }
-}
 
-
-## child Job:
-pipeline {
-    agent any
+    environment {
+        VALIDATION_STATUS = "PASSED"
+        buildstatus =null
+        //ENVIRONMENT =null
+    }
 
     stages {
-        stage('Hello') {
+        stage('Parameters'){
             steps {
                 script {
-                    dir("$WORKSPACE"){
-                        sh "echo $envr,a,d,d,e,d > mytest.csv"
-                        sh "cat mytest.csv"
+                properties([
+                        parameters([
+                            [$class: 'ChoiceParameter',
+                                choiceType: 'PT_SINGLE_SELECT',
+                                description: 'Select the ENVIRONMENT from the Dropdown List',
+                                filterLength: 1,
+                                filterable: false,
+                                name: 'ENVIRONMENT',
+                                script: [
+                                    $class: 'GroovyScript',
+                                    fallbackScript: [
+                                        classpath: [],
+                                        sandbox: true,
+                                        script:
+                                            "return['Could not get The ENVIRONMENTs']"
+                                    ],
+                                    script: [
+                                        classpath: [],
+                                        sandbox: true,
+                                        script:
+                                            "return['DEV-P','DEV-0','DEV-1','DEV-2','DEV-3','DEV-4','DEV-5','AZSIT-1','AZSIT-2','AZSIT-3','SIT-P','SIT-0','SIT-1','SIT-2','SIT-3','SIT-4','SIT-5','UAT-0','UAT-1','UAT-2','UAT-3','UAT-4','UAT-5']"
+                                    ]
+                                ]
+                            ]
+                        ])
+                    ])
+                }
+            }
+        }
+
+        stage('prepare environment'){
+          steps{
+              script {
+                  //env.ENVIRONMENT = "${params.ENVIRONMENT}"
+                  serverProperties = readProperties file: "${env.WORKSPACE}"+"/redis.properties"
+                  servers = serverProperties[ENVIRONMENT.trim()]
+                  SERVERS_LIST = servers.split(',')
+                  println("\nEnvironment: ${ENVIRONMENT} \nServer List: ${SERVERS_LIST}")
+              }
+          }
+        }
+
+        stage('check_sentinel_status') {   // check redis sentinel process status on all servers and start if not running
+            steps {
+                script {
+                    SERVERS_LIST.each { SERVER ->
+                        println("Server: ${SERVER}")
+                        dir(env.workspace){
+                          def sentinelprocess =  sh (script: "ssh -q -T devops@${SERVER}  ' ps -aef | grep redis | grep sentinel ' ", returnStdout: true)
+                          def sentinelprocs = sentinelprocess.readLines()
+                          println(sentinelprocs.size())
+                          if (sentinelprocs.size() == 1) {
+                              println('sentinel not running, starting..')
+                              sh "ssh  -T -n devops@${SERVER} 'sh /applredis/sentinel.sh' "
+                          }
+                        }
                     }
                 }
             }
         }
-    }
-    post {
-        success {
-            echo "success..."
+
+        stage('check_the_status'){  // Checking redis status on server 1
+            steps{
+                script {
+                    def ip = "${SERVERS_LIST[0]}"  // on first server
+                    println(ip)
+                    dir(env.workspace){
+                        def ret = sh (script: "ssh -q -T devops@${ip}  ' sh /appl/software/redis-5.0.8/src/validation-master.sh || true ' ", returnStdout: true)
+                        env.return = ret
+                        println(ret)
+                        def lines = ret.readLines()
+                        def redis1_map = [:]
+                        for (line in lines){
+                            println("the line is ${line}")
+                            def node = "${line}".split()
+                            redis1_map.put(node[1],node[0])
+                            println(node[1])
+                        }
+                        println(redis1_map)
+                        env.redis1 = redis1_map.sort()
+                        println(redis1.size())
+                        println(redis1_map.size())
+                        if ((redis1_map.size())== 6){
+                            VALIDATION_STATUS ="PASSED"
+                            println("the nodes have started successfully")
+                        }
+                        else {
+                            VALIDATION_STATUS ="NOTSTARTED"
+                            println("Starting of redis nodes will start shortly")
+                        }
+                    }
+                }
+            }
         }
-        failure{
-            echo "failure..."
+
+        // check master slave status on each nodes both sud be running
+        stage('check master slave status on each nodes'){
+            steps{
+                script {
+                    def master_port = 6379
+                    def slave_port = 6380
+                    dir(env.workspace){
+                      SERVERS_LIST.each { SERVER ->
+                        def ret = sh (script: "ssh -q -T devops@${SERVER}  'sh /appl/software/redis-5.0.8/src/validation-master.sh || true'", returnStdout: true)
+                        def lines = ret.readLines()
+                        def isMaster = false
+                        def isSlave = false
+                        for (line in lines){
+                            if (line.contains(SERVER)) { // only for line contains server ip
+                              //println("Line: ${line}")
+                              def entry = "${line}".split()
+                              def ID = entry[0]
+                              def node_ip = entry[1].split(':')[0]
+                              def node_port = entry[1].split(':')[1].split('@')[0]
+                              def srv_type = entry[2]
+                              if (node_port.toInteger() == master_port.toInteger()){
+                                  println("${node_port} is a master")
+                                  //echo "its master "
+                                  isMaster = true
+                              }
+                              if (node_port.toInteger() == slave_port.toInteger()){
+                                  println("${node_port} is a slave")
+                                  //echo "its slave"
+                                  isSlave = true
+                              }
+                           }
+                        }
+                         if (isMaster && isSlave){
+                             print("Master and Slave are validated, on node: $SERVER")
+                         }
+                         else {
+                            VALIDATION_STATUS = "NOTSTARTED"
+                            def RET = ''
+                            if (!isMaster){
+                                RET += 'Master '
+                            }
+                            if (!isSlave){
+                                RET += 'Slave '
+                            }
+                            println("$RET validating master and salve failed")
+                            //error("error validating master and slave ports")
+                        }
+                      }
+                    }
+                }
+            }
         }
-        always {
-            println('Archiveingall *.csv file')
-            archiveArtifacts artifacts: '*.csv'
+
+        // Start Redis master
+        stage('Master_start'){
+            when { expression { VALIDATION_STATUS == "NOTSTARTED" } }
+            steps{
+              script{
+                  SERVERS_LIST.each{ SERVER ->
+                      dir(env.workspace){
+                          def processes = sh (script: "ssh -q -T devops@${SERVER}  ' ps -aef | grep redis ' ", returnStdout: true)
+                          println(processes)
+                          // kill processes
+                          for (process in processes.readLines()){
+                              def redisprocess = "${process}".split()
+                              sh "ssh  -T -n devops@${SERVER} 'kill -9 ${redisprocess[1]} || true' "
+                          }
+                          // Start master service
+                          sh "ssh -T -n devops@${SERVER} 'sh /applredis/master.sh' "
+                      }
+                  }
+              }
+            }
         }
-    }
+
+        // Start Redis Slave
+        stage('Slave_start'){
+            when { expression{ VALIDATION_STATUS == "NOTSTARTED" } }
+            steps{
+              script {
+                  SERVERS_LIST.each{ SERVER ->
+                      dir(env.workspace){
+                          sh "ssh -T -n devops@${SERVER} 'sh /applredis/slave.sh'"
+                      }
+                  }
+              }
+            }
+        }
+
+        // Compare redis status
+        stage('compare_the_status'){
+            steps{
+              script{
+                  def ip = "${SERVERS_LIST[0]}" // on first server
+                  dir(env.workspace){
+                      def ret = sh (script: "ssh -q -T devops@${ip}  ' sh /appl/software/redis-5.0.8/src/validation-master.sh || true ' ", returnStdout: true)
+                      env.return = ret
+                      println(ret)
+                      def lines = ret.readLines()
+                      def redis1_map = [:]
+                      for (line in lines){
+                          println("the line is ${line}")
+                          def node = "${line}".split()
+                          redis1_map.put(node[1],node[0])
+                          println(node[1])
+                      }
+                      println(redis1_map)
+                      env.redis1 = redis1_map.sort()
+                  } //server1: {datat11.2.2.2}
+
+                  // on all server and c{ompare
+                  SERVERS_LIST.each{ SERVER ->
+                      println("Server: $SERVER")
+                      dir(env.workspace){
+                          def ret = sh (script: "ssh -q -T devops@${SERVER}  ' sh /appl/software/redis-5.0.8/src/validation-master.sh ' ", returnStdout: true)
+                          env.return = ret
+                          println(ret)
+                          def lines = ret.readLines()
+                          def redis2_map = [:]
+                          for (line in lines){
+                              println("the line is ${line}")
+                              def node = "${line}".split()
+                              redis2_map.put(node[1],node[0])
+                              println(node[1])
+                          }
+                          println(redis2_map)
+                          env.redis2 = redis2_map.sort()
+
+                          if(redis1.equals(redis2)) {
+                              println("this nodes are correct")
+                              buildstatus = "success"
+                          } else {
+                              buildstatus = "failure"
+                              error("build failed for wrong number of nodes")
+                          }
+                      }
+                  }
+                }
+            }
+        }
+
+    } // end stages
+
+         post{
+
+            failure {
+                script{
+                    if(buildstatus == "failure"){
+                        println("Failure Notice!")
+
+
+                        SUBJECT="!!! FAILED CERT GENERATION ON ${ENVIRONMENT}"
+
+                        emailext mimeType: 'text/html',
+                        body: """<html><head><style>
+                        table {width: 100%;text-align: center;border-collapse: collapse;border-spacing:0;}
+                        table, th {font-family: 'Calibri';border: 2px solid #F5F5DC;text-align: left}
+                        table, td {border: none;border-collapse: collapse;text-align: left;font-family: 'Calibri';font-size: 14px;}
+                        table td, table th {padding: 5px 5px;}
+                        table tbody td {background: #F5F5DC;}
+                        table thead th {font-size: 18px;font-weight: bold;background: #6B8E23;color: #FFFFFF;}
+                        foot {font-family: 'Calibri';font-size: 2px;color:black; background-color: #ffad99;text-align: center;}</style>
+                        <body><h1 style="text-align:center"> <font color ='red' size='5'>!!! REDIS VALIDATION FAILED !!! </h1>
+                            <table><thead><tr><th>ENVIRONMENT</th><th> ${ENVIRONMENT}</th></tr></thead><tbody>
+                            <tr><td>REDISID_ON_FIRST</td><td> ${redis1}</td></tr>
+                            <tr><td>REDISID_ON_SECOND</td><td> ${redis2}</td></tr></tbody></table>
+                            <p class='foot'>[ This is an auto generated email, please do not reply. If you have any queries, please email to
+                            <a href='mailto:specialty_platform_engg@CVSHealth.com?subject=${ENVIRONMENT} - Redis'>Platform Engg</a>  ] </p>
+                            </body></html>
+                        """,
+                        subject: SUBJECT,
+                        to: "phanindra.nagabhyru@CVSHealth.com"
+                    }
+                }
+            }//failure
+
+            success{
+                script{
+                 if(buildstatus == "sucess"){
+                     println("sucess Notice!")
+                    SUBJECT="SUCCESFUL Redis validation  ${params.ENVIRONMENT}"
+                    emailext mimeType: 'text/html',
+                    body: """<html><head><style>
+                        table {width: 100%;text-align: center;border-collapse: collapse;border-spacing:0;}
+                        table, th {font-family: 'Calibri';border: 2px solid #F5F5DC;text-align: left}
+                        table, td {border: none;border-collapse: collapse;text-align: left;font-family: 'Calibri';font-size: 14px;}
+                        table td, table th {padding: 5px 5px;}
+                        table tbody td {background: #F5F5DC;}
+                        table thead th {font-size: 18px;font-weight: bold;background: #6B8E23;color: #FFFFFF;}
+                        foot {font-family: 'Calibri';font-size: 2px;color:black; background-color: #ffad99;text-align: center;}</style>
+                        <body><h1 style="text-align:center"> <font color ='green' size='5'>*** REDIS VALIDATION SUCCESS *** </h1>
+                            <table><thead><tr><th>ENVIRONMENT</th><th> ${params.ENVIRONMENT}</th></tr></thead><tbody>
+                            <tr><td>REDISID_ON_NODES</td><td> ${redis1}</td></tr></tbody></table>
+                            <p class='foot'>[ This is an auto generated email, please do not reply. If you have any queries, please email to
+                            <a href='mailto:specialty_platform_engg@CVSHealth.com?subject=${ENVIRONMENT} -  REDIS VALIDATION'>Platform Engg</a>  ] </p>
+                            </body></html>
+                    """,
+                    subject: SUBJECT,
+                    //to: "NikhilKumar.Devaraju@CVSHealth.com,Chandru.Perumal@CVSHealth.com,Harika.Paimagam@CVSHealth.com,Nagaraju.Islavath@CVSHealth.com"
+                    to: "Harika.Paimagam@CVSHealth.com"
+                }
+                }
+            }//success
+         }//post
+
 }
 
-## END
+
