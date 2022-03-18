@@ -24,7 +24,7 @@ def validate_url(def lines) {
 
         // Get Env specific cert SHA
         def CERT_FP_FILE = readProperties file: WEB_ENV_CERTSHA_FILE
-        def ENV_CERT_FP = certSHAProp.get(ENVIRONMENT_NAME)
+        def ENV_CERT_FP = CERT_FP_FILE.get(ENVIRONMENT_NAME)
 
         lines.each { url ->
             def result = ""
