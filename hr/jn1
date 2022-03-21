@@ -30,10 +30,9 @@ def validate_url(def lines) {
             def result = ""
             def CERT_FP_VALID = 'Not Valid'
             def URL_HOST = url.trim().split('//')[-1]
-            //def URL_HOST_FP = sh (script: 'openssl s_client -connect "${URL_HOST}" < /dev/null 2>/dev/null | openssl x509 -fingerprint -noout -in /dev/stdin | awk -F= \'{print $NF}\'', returnStdout: true).trim()
             def URL_HOST_FP = sh (script: """
-                openssl s_client -connect ${URL_HOST} < /dev/null 2>/dev/null | openssl x509 -fingerprint -noout -in /dev/stdin | awk -F= '{print \$NF}'
-            """, returnStdout: true).trim()           
+                openssl s_client -connect ${URL_HOST} < /dev/null 2>/dev/null | openssl x509 -fingerprint -noout -in /dev/stdin | awk -F= '{print \$NF}' || true
+            """, returnStdout: true).trim()
             if (URL_HOST_FP == ENV_CERT_FP){
                 CERT_FP_VALID = 'Valid'
             }
