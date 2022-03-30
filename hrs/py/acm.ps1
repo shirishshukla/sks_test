@@ -30,6 +30,9 @@ $AWSREGION="" #ADD_HERE
 #$(curl --silent http://169.254.169.254/latest/dynamic/instance-identity/document | jq -r .region)
 Write-Host "Using AWSREGION: $AWSREGION"
 
+## deduct days
+$deductDays = 30
+
 aws configure set default.region $AWSREGION
 
 # Change Working Dir
@@ -138,7 +141,18 @@ if ($CertArns) {
   #caValidity=$(aws acm-pca describe-certificate-authority --certificate-authority-arn $pcaArn | jq -r .CertificateAuthority.NotAfter)
   $caAuthInfo = Get-PCACertificateAuthorityCertificate -CertificateAuthorityArn $pcaArn
   $caValidity=$caAuthInfo.CertificateAuthority.NotAfter
-  Write-Host "Ca Certificate Validity Expires in $caValidity"
+
+  # get age in days
+  Using Namespace Microsoft.VisualBasic
+  Add-Type  -AssemblyName  Microsoft.VisualBasic
+  $TODAY = Get-Date
+  $dateDiffDays = [DateAndTime]::DateDiff([DateInterval]::Day, $TODAY, $caValidity)
+  $days = $dateDiffDays - $deductDays
+  if (-not $dateDiffDays){
+    Write-Host "Can not get days value = $days"
+    exit 1
+  }
+  Write-Host "Ca Certificate Validity Expires in $days days"
 
   # Staging Variables for later use in CNF file
   $Country=$caAuthInfo.CertificateAuthority.CertificateAuthorityConfiguration.Subject.Country
@@ -200,6 +214,7 @@ CN = $CommonName
     Write-Host "$csr_file not exists."
     exit 1
   }
+
 
   Write-Host "Issuing new Certificate using given csr file $csr_file"
   $certArn=(aws acm-pca issue-certificate --certificate-authority-arn "$pcaArn" --csr fileb://${csr_file} --signing-algorithm "SHA256WITHRSA" --validity Value=$days,Type="DAYS" --idempotency-token $IdpToken).CertificateArn
