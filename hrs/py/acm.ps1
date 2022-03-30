@@ -144,7 +144,7 @@ if ($CertArns) {
 
   # get age in days
   Using Namespace Microsoft.VisualBasic
-  Add-Type  -AssemblyName  Microsoft.VisualBasic
+  Add-Type -AssemblyName Microsoft.VisualBasic
   $TODAY = Get-Date
   $dateDiffDays = [DateAndTime]::DateDiff([DateInterval]::Day, $TODAY, $caValidity)
   $days = $dateDiffDays - $deductDays
