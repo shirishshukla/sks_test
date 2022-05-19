@@ -1,3 +1,5 @@
+Using Namespace Microsoft.VisualBasic
+
 # AMS ACM PCA - Cert Automation-Windows
 Write-Host "Start certificate provisioning..."
 
@@ -143,7 +145,7 @@ if ($CertArns) {
   $caValidity=$caAuthInfo.CertificateAuthority.NotAfter
 
   # get age in days
-  Using Namespace Microsoft.VisualBasic
+
   Add-Type -AssemblyName Microsoft.VisualBasic
   $TODAY = Get-Date
   $dateDiffDays = [DateAndTime]::DateDiff([DateInterval]::Day, $TODAY, $caValidity)
