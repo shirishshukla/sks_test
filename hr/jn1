@@ -1,98 +1,19 @@
 #!/usr/bin/groovy
 
-def agentName="SPRx2.0_DEPLOY-ONLY"
-def webFileNameFile="web.txt"
-def certValidationFile="certValidation"
+def agentName="master"
 
-// Run shell command in non-debug mode
 def runShellCmd(cmd) {
     steps.sh (script: '#!/bin/sh -e\n'+ cmd,returnStdout: true)
 }
 
-// Validate URL
-def validate_url(def lines) {
-    def time_wait = env.WAIT_SEC
-    def PROCEED = 'True'
-    WEBCOUNT = lines.size()
+// Pipeline
+pipeline{
 
-    println("URLs: \n" + lines.join(',').replace(',', '\n') + '\nTotal: '+ WEBCOUNT )
-
-    if (WEBCOUNT > 0) {
-        def ReportHeader = 'ENVIRONMENT, URL, Service_Status, Certificate_Status'
-        runShellCmd("echo $ReportHeader > $REPORT_CSV_FILE")
-        sh "> /tmp/.st"
-
-        // Get Env specific cert SHA
-        def CERT_FP_FILE = readProperties file: WEB_ENV_CERTSHA_FILE
-        def ENV_CERT_FP = CERT_FP_FILE.get(ENVIRONMENT_NAME)
-
-        lines.each { url ->
-            def result = ""
-            def CERT_FP_VALID = 'Not Valid'
-            def URL_HOST = url.trim().split('//')[-1]
-            def URL_HOST_FP = sh (script: """
-                openssl s_client -connect ${URL_HOST} < /dev/null 2>/dev/null | openssl x509 -fingerprint -noout -in /dev/stdin | awk -F= '{print \$NF}' || true
-            """, returnStdout: true).trim()
-            if (URL_HOST_FP == ENV_CERT_FP){
-                CERT_FP_VALID = 'Valid'
-            }
-
-            // Check URL Accessible
-            def CMD = '''
-                URLCheck='''+url+'''
-                EnvName='''+ENVIRONMENT_NAME+'''
-                REPORT_CSV_FILE='''+REPORT_CSV_FILE+'''
-                CERT_FP_VALID='''+CERT_FP_VALID+'''
-                StatusCode=$(curl -s -o /dev/null -w "%{http_code}" ${URLCheck} || true)
-                if [[ $StatusCode -eq 200 ]]; then
-                    ServiceStatus='<font color=green><b>GOOD</b></font>'
-                    touch /tmp/.st
-                else
-                    ServiceStatus='<font color=red><b>BAD</b></font>'
-                    echo False > /tmp/.st
-                fi
-                ServiceLink="<a href=\"${URLCheck}\" target=\"_blank\">${ServiceStatus}</a>"
-                ServiceStatus=$ServiceLink
-
-                echo "$URLCheck: StatusCode - ServiceStatus"
-                result="${EnvName}, ${URLCheck}, ${ServiceStatus}, ${CERT_FP_VALID}"
-                echo $result >> $REPORT_CSV_FILE
-            '''
-            runShellCmd(CMD)
-        } // end loop
-
-        PROCEEDT=sh (script: 'cat /tmp/.st', returnStdout: true).trim()
-        if(PROCEEDT == 'False'){
-            PROCEED = 'False'
-        }
-    }
-    return PROCEED
-}
-
-
-// pipeline
-pipeline {
-
-    agent {
+    agent{
         label agentName
     }
 
-    environment {
-        WAIT_SEC = 2 // wait for seconds between builds
-        ENVIRONMENT_NAME = "${env.ENVIRONMENT}"
-        WEB_FILE_PATH =  "${env.WORKSPACE}/${ENVIRONMENT_NAME}/${webFileNameFile}"
-        REPORT_CSV_FILE = "${env.WORKSPACE}/report.csv"   // Report csv file
-        HTML_REPORT_FILE = "${env.WORKSPACE}/report.html"  // Report html format
-        WEB_ENV_CERTSHA_FILE = "${env.WORKSPACE}/${certValidationFile}"  // CERT HASH FILE
-        NOTIFY_SUBJECT = "Web Server Validation"    // Email Notification Subject
-        //NOTIFY_TO = "Harika.Paimagam@cvshealth.com,NikhilKumar.Devaraju@CVSHealth.com,Chandru.Perumal@CVSHealth.com,Nagaraju.Islavath@CVSHealth.com"
-        NOTIFY_TO = "Harika.Paimagam@cvshealth.com"
-        WEBCOUNT = 0
-        ReportSize = 0
-
-    }
-
-    stages {
+    stages{
 
         // Clean  WORKSPACE
         stage("Clean WS") {
@@ -102,247 +23,46 @@ pipeline {
         }
 
         // Checkout GIT REPO
-        stage("Checkout") {
+        // stage("Checkout") {
+        //     steps{
+        //         checkout scm
+        //     }
+        // }
+
+        stage('prepare environment'){
+          steps{
+              script {
+                  //serverProperties = readProperties file: "${env.WORKSPACE}"+"/FIM.properties"
+                  //servers = serverProperties[ENVIRONMENT.trim()]
+                  //servers = serverProperties[ENVIRONMENT.trim()]
+                  servers = "172.17.0.3, 172.17.0.3"
+                  ENVIRONMENT = "dev"
+                  SSH_USER = 'root'
+                  SERVERS_LIST = servers.split(',')
+                  println("\nEnvironment: ${ENVIRONMENT} \nServer List: ${SERVERS_LIST}")
+              }
+          }
+        }
+
+        stage("Generate FIM report"){
             steps{
-                checkout scm
-            }
-        }
-
-        // Validate WebFile
-        stage("Validate WebFile") {
-            steps {
-                script {
-                      // Get property file commit author and author and commit message
-                      PROPERTIESFILE_COMMIT_AUTHOR=sh(script: 'git log -n 1 --pretty=format:"%an" -- "${WEB_FILE_PATH}" | awk \'{ $NF="";print}\'', returnStdout: true).trim()
-                      PROPERTIESFILE_COMMIT_MESSAGE=sh(script: 'git log -n 1 -- "${WEB_FILE_PATH}" | tail -1', returnStdout: true).trim()
-
-                      // No. of entries in properties file
-                      def webFile = readFile file: WEB_FILE_PATH
-                      lines = webFile.readLines()
-                      WEBCOUNT = lines.size()
-                }
-            }
-        }
-
-        // Validate URL
-        stage("Validate URL") {
-                when {
-                    expression { WEBCOUNT > 0 }
-                }
-
-            steps {
-                script {
-                    dir(env.WORKSPACE) {
-                        res = validate_url(lines)
-                        // result csv file
-                        def reportFile = readFile file: REPORT_CSV_FILE
-                        def ReportSize = reportFile.readLines()
-                        ReportSize = reportFile.size()
-                        if (ReportSize > 0) {
-                            sh "cat ${REPORT_CSV_FILE}"
-                        } else {
-                            println('Result is null no URL')
-                        }
-                        // return final status
-                        if (res != 'True'){
-                            println('Process Failed.')
-                            env.BUILDST='Failed'
-                        } else {
-                            println('Completed Successfully.')
-                            env.BUILDST='Success'
+                script{
+                    def REPORT_CSV_FILE = "${WORKSPACE}/reportfile.csv"
+                    runShellCmd("echo Server Name, File Date, File Time, File Name > ${REPORT_CSV_FILE}")
+                    SERVERS_LIST.each { SERVER ->
+                        SERVER = SERVER.trim()
+                        println("Server: ${SERVER}")
+                        runShellCmd("echo ${SERVER},,, >> ${REPORT_CSV_FILE}")
+                        dir(env.workspace){
+                        def result = sh (script: """
+                          ssh -q -o StrictHostKeyChecking=no ${SSH_USER}@${SERVER} ls -lc /appl/deploy/* | egrep '.tar\$|.gz\$|.jar\$' | awk '{print ","\$6"-"\$7","\$8","\$9}' | sed 's#/appl/deploy##g'
+                        """, returnStdout: true)
+                          runShellCmd("echo \"${result}\" >> ${REPORT_CSV_FILE}")
                         }
                     }
+                    print("your report in file: ${REPORT_CSV_FILE}")
                 }
-            }
-        }
-
-
-        // Generate HTML Repot File
-        stage("Generate HTML Report File") {
-            when {
-                expression { WEBCOUNT > 0 && ReportSize > 0 }
-            }
-            steps{
-                dir(env.WORKSPACE) {
-                    script {
-                        def CMD= '''
-                              cat ${REPORT_CSV_FILE}
-                              report_gen() {
-                                  echo "<table class=\"table1\" border=\"3\" bordercolor=\"black\">"
-                                  header=true
-                                  while read LINE; do
-                                    if $header;then
-                                        echo "<tr><th>${LINE//,/</th><th>}</th></tr>"
-                                        header=false
-                                    else
-                                        echo "<tr><td>${LINE//,/</td><td>}</td></tr>"
-                                    fi
-                                  done < ${REPORT_CSV_FILE}
-                                  echo "</table>"
-                              }
-                              report_gen > ${HTML_REPORT_FILE}
-                        '''
-                        runShellCmd(CMD)
-                      }
-                }
-            }
-        }
-
-        // Sent email Notification
-        stage("Notification") {
-            steps {
-                script {
-                      REPORT_HEADER_HTML = """
-                        <html>
-                          <style>
-                          pre, ul, li, body {
-                                        font-family: 'Calibri';
-                                        font-size: 12px;
-                                }
-                          .par {
-                                  font-family: 'Calibri';
-                                  font-size: 12px;
-                              }
-                          .title {
-                                        font-family: 'Rockwell Extra Bold';
-                                        font-size: 20px;
-                                        color:red;
-                                        background-color: gold;
-                                        text-align: center;
-                                  }
-                          .foot {
-                                        font-family: 'Calibri';
-                                        font-size: 15px;
-                                        color:black;
-                                        background-color: #ffad99;
-                                        text-align: center;
-                                 }
-                          .foot1 {
-                                        font-family: 'Calibri';
-                                        font-size: 18px;
-                                        color:black;
-                                        background-color: lightblue;
-                                        text-align: center;
-                                 }
-                      <!--  Table 1: Style  Start here -->
-                          table {
-                                        width: 100%;
-                                        text-align: center;
-                                        border-collapse: collapse;
-                                 }
-                              th {
-                                        padding: 10px 5px;
-                                        font-family: 'Calibri';
-                                        border: 1px solid #fff23df;
-                                 }
-                              td {
-                                        padding: 5px 10px;
-                                        border-collapse: collapse;
-                                        text-align: center;
-                                        font-family: 'Calibri';
-                                        font-size: 16px;
-                                 }
-                       tbody, td {
-                                        background: #D0E4F5;
-                                 }
-                       thead, th {
-                                        font-size: 18px;
-                                        font-weight: bold;
-                                        color: #AED6F1;
-                                        background: #1C6EA4;
-                                        background: -moz-linear-gradient(top, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
-                                        background: -webkit-linear-gradient(top, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
-                                        background: linear-gradient(to bottom, #5592bb 0%, #327cad 66%, #1C6EA4 100%);
-                                 }
-                         </style>
-                         <body>
-                     """
-
-                      REPORT_FOOTER = """
-                           </ul>
-                           <br></br>
-                           <p class='foot1'>[ This is an auto generated email, please do not reply. If you have any queries, please email to
-                           <a href='mailto:specialty_platform_engg@CVSHealth.com?subject=${NOTIFY_SUBJECT}'>Platform Engg</a> ]</p>
-                           </body>
-                           </html>
-                      """
-                      // Report have data
-                      if(WEBCOUNT > 0) {
-                          REPORT_HEADER = "<h2 align='center'>Web Server URL Validation</h2>"
-                          REPORT_BODY = sh(script: "cat ${HTML_REPORT_FILE}", returnStdout: true).trim()
-                          REPORT_COMMIT = "Build Initiated By:&nbsp;${PROPERTIESFILE_COMMIT_AUTHOR}"
-                          REPORT_COMMIT_MSG = "Comment: ${PROPERTIESFILE_COMMIT_MESSAGE}"
-                      }
-
-                      // Report is Blank i.e no services
-                      else {
-                        REPORT_HEADER = "<h2 align='center'>Web Server URL Validation</h2>"
-                        REPORT_BODY="""
-                                <center>
-                                  <h1 style="background-color:#FFC300 ;">!! No Validations planned in this window !!</h1>
-                                </center>
-                        """
-                        REPORT_COMMIT = ""
-                        REPORT_COMMIT_MSG = ""
-                      }
-
-                      EMAIL_CONTENT = REPORT_HEADER_HTML + "<body>" +
-                                      REPORT_HEADER +
-                                      """
-                                      <br></br>
-                                      <center>
-                                        <ul style="color:#3B240B">
-                                      """ +
-                                      REPORT_BODY + "</center><br><br>" +
-                                      //REPORT_COMMIT + "<br>" +
-                                      //REPORT_COMMIT_MSG +
-                                      REPORT_FOOTER
-                } // end scripts
-          } // end steps
-      } // end stage
-    } // end stages
-
-    post{
-        success {
-            script {
-                    EMAILSUBJ = ENVIRONMENT_NAME + ':' + NOTIFY_SUBJECT
-                    if (env.BUILDST == 'Failed') {
-                        EMAILSUBJ = EMAILSUBJ + ': Failed'
-                    }
-                    println("!! URL Validation Completed !!")
-                    emailext mimeType: 'text/html',
-                    body: EMAIL_CONTENT,
-                    subject: EMAILSUBJ,
-                    to: NOTIFY_TO
-            }
-        }
-
-        failure {
-            script {
-                    println("!!!!!!!!!!!!!!!!!!!!!  FAILED  FAILED  FAILED  FAILED  FAILED  FAILED !!!!!!!!!!!!!!!!!!!!!")
-                    EMAILSUBJ = ENVIRONMENT_NAME + ':' + NOTIFY_SUBJECT
-                    if (env.BUILDST == 'Failed') {
-                        EMAILSUBJ = EMAILSUBJ + ': Failed'
-                    }
-                    NOTIFY_SUBJECT = NOTIFY_SUBJECT + ": FAILED "
-                    emailext mimeType: 'text/html',
-                    body: EMAIL_CONTENT,
-                    subject: EMAILSUBJ,
-                    to: NOTIFY_TO
-            }
-        }
-
-        always {
-            script {
-                    // mark failure
-                    if (env.BUILDST == 'Failed') {
-                        error('Some Web Validation status is BAD')
-                    } else {
-                        println('Validation Status is Success')
-                    }
             }
         }
     }
 }
-
-// end
