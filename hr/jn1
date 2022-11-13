@@ -1,20 +1,138 @@
-        stage("Generate FIM report"){
+#!/usr/bin/groovy
+
+def agentName="SPRx2.0_DEPLOY-ONLY"
+
+def runShellCmd(cmd) {
+  steps.sh (script: '#!/bin/sh -e\n'+ cmd, returnStdout: true)
+}
+
+def find_servers(serverslist) {
+  res = [:]
+  serverslist.each { srv ->
+    srv = srv.trim()
+    //infile = runShellCmd("grep -liw $srv *.yaml || true").trim()
+    infile = runShellCmd("grep -iH $srv *.yaml || true").trim()
+    println(infile)
+    if (infile) {
+        srv = infile.split(' ')[-1].trim()
+        infile = infile.split(':')[0].trim()
+        loadfile = readYaml file: "${infile}"
+        loadfile.each { k, v ->
+           for (s in v){
+               if (s == srv){
+                  if (! res."${k}") {
+                      res[k] = [s]
+                  } else {
+                      t = res[k]
+                      t.add(s)
+                      res[k] = t.flatten().unique()
+                  }
+               }
+           }
+        }
+    } else{
+        println("FAILED: Server $srv not found in any of the env file")
+    }
+  }
+  return res
+}
+
+// Pipeline
+pipeline{
+
+    agent{
+        label agentName
+    }
+
+    environment{
+        NOTIFY_TO_EMAIIDS        = 'Harika.Paimagam@CVSHealth.com'
+        REPORT_FILE              = "${WORKSPACE}/_Report.csv"
+    }
+
+    stages{
+        // Clean  WORKSPACE
+        stage("Clean WS") {
+            steps{
+                step([$class: 'WsCleanup'])
+            }
+        }
+
+        // Checkout GIT REPO
+        stage("Checkout") {
+            steps{
+                checkout scm
+            }
+        }
+
+        stage('Prepare Environment'){
+          steps{
+              script {
+                SERVERS_LIST_INPUT = false
+                if (ENVIRONMENT) {
+                  SERVERS_LIST = readYaml file: "${ENVIRONMENT}.yml"
+                } else if(SERVERS_LIST) {
+                  SERVERS_LIST_INPUT = SERVERS_LIST.split(',')
+                  SERVERS_LIST = find_servers(SERVERS_LIST_INPUT)
+                } else {
+                  error("FAILED: Input ENVIRONMENT or SERVERS_LIST must be provided!!!")
+                }
+                println("\nEnvironment: ${ENVIRONMENT} \nServer List: ${SERVERS_LIST}")
+              }
+          }
+        }
+
+        stage("Generate Validation report"){
             steps{
                 script{
-                    def REPORT_CSV_FILE = "${WORKSPACE}/reportfile.csv"
-                    runShellCmd("echo Server Name, File Date, File Time, File Name > ${REPORT_CSV_FILE}")
-                    SERVERS_LIST.each { SERVER ->
-                        SERVER = SERVER.trim()
-                        println("Server: ${SERVER}")
-                        runShellCmd("echo ${SERVER},,, >> ${REPORT_CSV_FILE}")
+                    def REPORT_FILE = "${WORKSPACE}/_Report.csv"
+                    runShellCmd("> ${REPORT_FILE}") // RESET FILE IF EXIST
+                    // count=SERVERS_LIST.SERVER.size()
+                    // print("Number of server: ${count}")
+                    // for(SERVER in SERVERS_LIST.SERVER){
+                    SERVERS_LIST.each { TYPE, SERVERS ->
+                      println("TYPE: $TYPE, Server: ${SERVERS}")
+                      for (SERVER in SERVERS){
+                        runShellCmd("echo -e \"<font style='color:blue;font-size:20;background-color:lightblue'>********** Server: $SERVER **********</font>\" >> $REPORT_FILE")
                         dir(env.workspace){
-                        def result = sh (script: """
-                          ssh -q -o StrictHostKeyChecking=no ${SSH_USER}@${SERVER} ls -lc /appl/deploy/* | egrep '.tar\$|.gz\$|.jar\$' | awk '{print ","\$6"-"\$7","\$8","\$9}' | sed 's#/appl/deploy##g'
-                        """, returnStdout: true)
-                          runShellCmd("echo \"${result}\" >> ${REPORT_CSV_FILE}")
+                          def result= sh (script: """
+                            ssh -q -o StrictHostKeyChecking=no devops@${SERVER} <<-'EOL'
+                              echo "<br><b>System Uptime: </b>"; uptime;
+                              echo "<br><b>Kernel Version: </b>"; uname -r;
+                              echo "<br><b>NTP Status: </b>"; ntpstat | grep -i sync;
+                              echo "<br><b>Filesystems: </b>"; df -h | awk '/app_vg/{print "<br>"\$0}';
+                              [[ $TYPE != 'WEB_SERVER' ]] && (echo "<br><b>Java Version: </b>"; /appl/software/jdk-11/bin/java -version 2>&1 | awk '{print "<br>"\$0}';)
+                              echo "<br>"
+EOL
+                            """, returnStdout: true)
+                            runShellCmd("echo \"${result}\" >> ${REPORT_FILE}")
                         }
+                      }
                     }
-                    print("your report in file: ${REPORT_CSV_FILE}")
+                    println("result: ${REPORT_FILE}")
+                    sh "cat ${REPORT_FILE}"
+                }
+            }
+        } // END STAGE - GENERATE REPORT
+        stage("Prepare Email Notification Content"){
+            steps {
+                script {
+                    dir("$WORKSPACE") {
+                        REPORT_HEADER= "<html><body>"
+                        REPORT_BODY= sh(script: "cat ${REPORT_FILE}", returnStdout: true).trim()
+                        REPORT_FOOTER= "</body></html>"
+                        EMAIL_CONTENT= REPORT_HEADER + REPORT_BODY + REPORT_FOOTER
+                        EMAIL_SUBJECT= " Validation Report: ${ENVIRONMENT}, Total Servers: ${count} "
+
+                        // Send Email Notification
+                        emailext(
+                          mimeType: 'text/html',
+                          body: EMAIL_CONTENT,
+                          subject: EMAIL_SUBJECT,
+                          to: NOTIFY_TO_EMAIIDS
+                        )
+                    }
                 }
             }
         }
+    }
+}
