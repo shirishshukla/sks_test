@@ -10,8 +10,8 @@ def find_servers(serverslist) {
   res = [:]
   serverslist.each { srv ->
     srv = srv.trim()
-    //infile = runShellCmd("grep -liw $srv *.yaml || true").trim()
-    infile = runShellCmd("grep -iH $srv *.yaml || true").trim()
+    //infile = runShellCmd("grep -liw $srv *.yml || true").trim()
+    infile = runShellCmd("grep -iH $srv *.yml || true").trim()
     println(infile)
     if (infile) {
         srv = infile.split(' ')[-1].trim()
