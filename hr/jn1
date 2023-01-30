@@ -1,137 +1,53 @@
-#!/usr/bin/groovy
+properties([
+  parameters([
 
-def agentName="SPRx2.0_DEPLOY-ONLY"
+    // Generic
+    string(name: 'account', defaultValue: 'test', description: "message descriotion here..."),
+    // desired nodes to be backup
+    [$class: 'CascadeChoiceParameter',
+      name: 'skip_jobs', choiceType: 'PT_CHECKBOX', description: 'Select jobs to be Skip.',
+      filterLength: 1, filterable: false, referencedParameters: 'environment',
+      script: [$class: 'GroovyScript',
+          script: [
+              classpath: [],
+              sandbox: true,
+              script: """
+                  return['job1', 'job2', 'job3']
+              """.stripIndent()
+          ]
+      ]
+    ]
+  ])
+])
 
-def runShellCmd(cmd) {
-  steps.sh (script: '#!/bin/sh -e\n'+ cmd, returnStdout: true)
-}
 
-def find_servers(serverslist) {
-  res = [:]
-  serverslist.each { srv ->
-    srv = srv.trim()
-    //infile = runShellCmd("grep -liw $srv *.yml || true").trim()
-    infile = runShellCmd("grep -iH $srv *.yml || true").trim()
-    println(infile)
-    if (infile) {
-        srv = infile.split(' ')[-1].trim()
-        infile = infile.split(':')[0].trim()
-        loadfile = readYaml file: "${infile}"
-        loadfile.each { k, v ->
-           for (s in v){
-               if (s == srv){
-                  if (! res."${k}") {
-                      res[k] = [s]
-                  } else {
-                      t = res[k]
-                      t.add(s)
-                      res[k] = t.flatten().unique()
-                  }
-               }
-           }
-        }
-    } else{
-        println("FAILED: Server $srv not found in any of the env file")
+def remove_skip_jobs(def job_list, def skip_jobs) {
+  println("--> remove jobs -> $skip_jobs")
+  def job_list_skip = []
+  job_list.each { job_name ->
+    skip_jobs.split(',').each { skip_job ->
+      if (job_name.toLowerCase().split('/')[-1].equals(skip_job)){
+        job_list_skip.add(job_name)
+        return
+      }
     }
   }
-  return res
+  job_list = job_list - job_list_skip
+  println("--After-> $job_list")
+  return job_list
 }
 
-// Pipeline
-pipeline{
+pipeline {
+    agent any
 
-    agent{
-        label agentName
-    }
-
-    environment{
-        NOTIFY_TO_EMAIIDS        = 'Harika.Paimagam@CVSHealth.com'
-        REPORT_FILE              = "${WORKSPACE}/_Report.csv"
-    }
-
-    stages{
-        // Clean  WORKSPACE
-        stage("Clean WS") {
-            steps{
-                step([$class: 'WsCleanup'])
-            }
-        }
-
-        // Checkout GIT REPO
-        stage("Checkout") {
-            steps{
-                checkout scm
-            }
-        }
-
-        stage('Prepare Environment'){
-          steps{
-              script {
-                SERVERS_LIST_INPUT = false
-                if (ENVIRONMENT) {
-                  SERVERS_LIST = readYaml file: "${ENVIRONMENT}.yml"
-                } else if(SERVERS_LIST) {
-                  SERVERS_LIST_INPUT = SERVERS_LIST.split(',')
-                  SERVERS_LIST = find_servers(SERVERS_LIST_INPUT)
-                } else {
-                  error("FAILED: Input ENVIRONMENT or SERVERS_LIST must be provided!!!")
-                }
-                println("\nEnvironment: ${ENVIRONMENT} \nServer List: ${SERVERS_LIST}")
-              }
-          }
-        }
-
-        stage("Generate Validation report"){
-            steps{
-                script{
-                    def REPORT_FILE = "${WORKSPACE}/_Report.csv"
-                    runShellCmd("> ${REPORT_FILE}") // RESET FILE IF EXIST
-                    // count=SERVERS_LIST.SERVER.size()
-                    // print("Number of server: ${count}")
-                    // for(SERVER in SERVERS_LIST.SERVER){
-                    SERVERS_LIST.each { TYPE, SERVERS ->
-                      println("TYPE: $TYPE, Server: ${SERVERS}")
-                      for (SERVER in SERVERS){
-                        runShellCmd("echo -e \"<font style='color:blue;font-size:20;background-color:lightblue'>********** Server: $SERVER **********</font>\" >> $REPORT_FILE")
-                        dir(env.workspace){
-                          def result= sh (script: """
-                            ssh -q -o StrictHostKeyChecking=no devops@${SERVER} <<-'EOL'
-                              echo "<br><b>System Uptime: </b>"; uptime;
-                              echo "<br><b>Kernel Version: </b>"; uname -r;
-                              echo "<br><b>NTP Status: </b>"; ntpstat | grep -i sync;
-                              echo "<br><b>Filesystems: </b>"; df -h | awk '/app_vg/{print "<br>"\$0}';
-                              [[ $TYPE != 'WEB_SERVER' ]] && (echo "<br><b>Java Version: </b>"; /appl/software/jdk-11/bin/java -version 2>&1 | awk '{print "<br>"\$0}';)
-                              echo "<br>"
-EOL
-                            """, returnStdout: true)
-                            runShellCmd("echo \"${result}\" >> ${REPORT_FILE}")
-                        }
-                      }
-                    }
-                    println("result: ${REPORT_FILE}")
-                    sh "cat ${REPORT_FILE}"
-                }
-            }
-        } // END STAGE - GENERATE REPORT
-        stage("Prepare Email Notification Content"){
+    stages {
+        stage('Hello') {
             steps {
                 script {
-                    dir("$WORKSPACE") {
-                        REPORT_HEADER= "<html><body>"
-                        REPORT_BODY= sh(script: "cat ${REPORT_FILE}", returnStdout: true).trim()
-                        REPORT_FOOTER= "</body></html>"
-                        EMAIL_CONTENT= REPORT_HEADER + REPORT_BODY + REPORT_FOOTER
-                        EMAIL_SUBJECT= " Validation Report: ${ENVIRONMENT}, Total Servers: ${count} "
-
-                        // Send Email Notification
-                        emailext(
-                          mimeType: 'text/html',
-                          body: EMAIL_CONTENT,
-                          subject: EMAIL_SUBJECT,
-                          to: NOTIFY_TO_EMAIIDS
-                        )
-                    }
+                    a=10
+                    echo "hello - $skip_jobs"
                 }
+                
             }
         }
     }
