@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Generate Random Number
+    - name: Generate Random Number1
       run: |
         echo "RANDOM_NUMBER=$((RANDOM % 100))"
         ::set-output name=random_number value=$RANDOM_NUMBER
