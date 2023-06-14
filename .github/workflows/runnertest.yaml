@@ -8,7 +8,7 @@ on:
       - completed
 
 jobs:
-  generate_random_number:
+  generate_random_number1:
     runs-on: ubuntu-latest
 
     steps:
