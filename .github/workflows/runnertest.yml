@@ -1,11 +1,9 @@
 name: Generate Random Number1
 
 on:
-  workflow_run:
-    workflows:
+  push:
+    branches:
       - master
-    types:
-      - completed
 
 jobs:
   generate_random_number1:
