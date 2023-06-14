@@ -13,8 +13,9 @@ jobs:
     - name: Generate Random Number
       run: |
         echo "RANDOM_NUMBER=$((RANDOM % 100))"
-        echo $RANDOM_NUMBER > github_output.txt
+        echo $RANDOM_NUMBER > github_output1.txt
     - name: Read Output
       run: |
-        read RANDOM_NUMBER < github_output.txt
+        read RANDOM_NUMBER < github_output1.txt
         echo $RANDOM_NUMBER > random-number.txt
+        cat random-number.txt
