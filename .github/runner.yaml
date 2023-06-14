@@ -1,0 +1,21 @@
+name: Generate Random Number
+
+on:
+  workflow_run:
+    workflows:
+      - Main
+    types:
+      - completed
+
+jobs:
+  generate_random_number:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Generate Random Number
+      run: |
+        echo "RANDOM_NUMBER=$((RANDOM % 100))"
+        ::set-output name=random_number value=$RANDOM_NUMBER
+    - name: Create File
+      run: |
+        echo $RANDOM_NUMBER > random-number.txt
