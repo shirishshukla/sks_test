@@ -3,7 +3,7 @@ name: Generate Random Number1
 on:
   workflow_run:
     workflows:
-      - Main
+      - master
     types:
       - completed
 
