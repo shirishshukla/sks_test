@@ -6,14 +6,15 @@ on:
       - master
 
 jobs:
-  generate_random_number1:
+  generate_random_number:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Generate Random Number1
+    - name: Generate Random Number
       run: |
         echo "RANDOM_NUMBER=$((RANDOM % 100))"
-        ::set-output name=random_number value=$RANDOM_NUMBER
-    - name: Create File
+        echo $RANDOM_NUMBER > github_output.txt
+    - name: Read Output
       run: |
+        read RANDOM_NUMBER < github_output.txt
         echo $RANDOM_NUMBER > random-number.txt
