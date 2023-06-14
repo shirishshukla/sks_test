@@ -1,4 +1,4 @@
-name: Generate Random Number
+name: Generate Random Number1
 
 on:
   workflow_run:
