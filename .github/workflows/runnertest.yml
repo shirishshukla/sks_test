@@ -15,6 +15,7 @@ jobs:
       - name: Set ENV var
         run: |
           ls > test1.txt
+          cat test1.txt
 
       - name: Use ENV var via `env` block
         run: |
