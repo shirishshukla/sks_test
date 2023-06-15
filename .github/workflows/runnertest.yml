@@ -16,5 +16,4 @@ jobs:
 
       - name: Use ENV var via `env` block
         run: |
-          echo $CUSTOM_VAR # OK
-          echo ${{ env.CUSTOM_VAR }} # OK
+          echo ${{env.CUSTOM_VAR}} # OK
