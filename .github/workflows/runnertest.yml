@@ -10,15 +10,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Generate Random Number
-      id: s1
-      run: |
-        echo "RANDOMNUMBER=$((RANDOM % 100))"
-        echo "RANDOMNUMBER=$RANDOMNUMBER" >> $GITHUB_ENV
-        echo hello -1 - $RANDOMNUMBER
-      set-output:
-          name: OUT1
-          value: ${{ steps.s1.outputs.RANDOMNUMBER }}
-    - name: Read Output
-      run: |
-        echo hello -2- $OUT1
+      - name: Set ENV var
+        run: |
+          echo "CUSTOM_VAR=IT WORKS" >> $GITHUB_ENV
+
+      - name: Use ENV var via `env` block
+        run: |
+          echo $CUSTOM_VAR # OK
+          echo ${{ env.CUSTOM_VAR }} # OK
