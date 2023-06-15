@@ -12,7 +12,7 @@ jobs:
     steps:
       - name: Set ENV var
         run: |
-          echo "CUSTOM_VAR=IT WORKS" >> $GITHUB_ENV
+          echo "CUSTOM_VAR=$(pwd)" >> $GITHUB_ENV
 
       - name: Use ENV var via `env` block
         run: |
