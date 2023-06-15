@@ -14,22 +14,13 @@ jobs:
     steps:
       - name: Set ENV var
         run: |
-         VAR0=$(cat << EOF
-           {
-              "awsvpcConfiguration": {
-                  "subnets": [
-                      "subnet-0c635e43566c97d4c",
-                      "subnet-0e145f3b7a7958f0e"
-                  ],
-                  "securityGroups": [
-                      "sg-0093de3601375a5bb"
-                  ],
-                  "assignPublicIp": "ENABLED"
-              }
-           }
-           EOF
+          MY_STRING=$(cat << EOF
+          first line
+          second line
+          third line
+          EOF
           )
-          echo "VAR1=$VAR0" >>  >> $GITHUB_ENV
+          echo "VAR1=$MY_STRING" >>  >> $GITHUB_ENV
 
       - name: Use ENV var via `env` block
         run: |
