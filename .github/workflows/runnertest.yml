@@ -16,9 +16,8 @@ jobs:
       id: s1
       run: |
         RANDOMNUMBER=$(curl --location https://cat-fact.herokuapp.com/facts/|jq -c)
-        echo "RANDOMNUMBER=$RANDOMNUMBER" >> $GITHUB_ENV
-        echo hello -1 - $RANDOMNUMBER
+        echo "RANDOMNUMBER1=$SVC_NET_CONF" >> $GITHUB_ENV
     - name: Read Output
       run: |
-        echo ${SVC_NET_CONF}
-        ls $SVC_NET_CONF
+        echo ${RANDOMNUMBER1}
+        ls $RANDOMNUMBER1
