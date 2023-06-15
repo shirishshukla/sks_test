@@ -19,5 +19,4 @@ jobs:
         echo "RANDOMNUMBER1=$RANDOMNUMBER" >> $GITHUB_ENV
     - name: Read Output
       run: |
-        echo ${RANDOMNUMBER1}
-        ls $RANDOMNUMBER1
+        ls ${RANDOMNUMBER1:1:-1}
