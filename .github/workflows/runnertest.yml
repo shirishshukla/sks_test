@@ -14,7 +14,7 @@ jobs:
     - name: Generate Random Number
       id: s1
       run: |
-        RANDOMNUMBER=$(ls)
+        RANDOMNUMBER=$((ls))
         echo "RANDOMNUMBER=$RANDOMNUMBER" >> $GITHUB_ENV
         echo hello -1 - $RANDOMNUMBER
     - name: Read Output
