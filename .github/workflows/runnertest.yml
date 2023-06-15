@@ -23,4 +23,5 @@ jobs:
         echo "TD_RUN_ID=$TD_RUN_ID1" >> $GITHUB_ENV
     - name: test
       run: |
-        echo --- $TD_RUN_ID ---
+        echo --- ${TD_RUN_ID} ---
+        echo --- \'${TD_RUN_ID}\' ---
