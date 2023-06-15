@@ -14,14 +14,8 @@ jobs:
     steps:
       - name: Set ENV var
         run: |
-          MY_STRING=$(cat << EOF
-          first line
-          second line
-          third line
-          EOF
-          )
-          echo "VAR1=$MY_STRING" >>  >> $GITHUB_ENV
+          ls | tee test1.txt
 
       - name: Use ENV var via `env` block
         run: |
-          echo ${{env.CUSTOM_VAR}} # OK
+          echo "hello=$(cat test1.txt)"
