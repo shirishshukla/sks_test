@@ -21,3 +21,5 @@ jobs:
       run: |
         echo ${RANDOMNUMBER1}
         ls $RANDOMNUMBER1
+      env:
+        RANDOMNUMBER1: ${RANDOMNUMBER1:1:-1}
