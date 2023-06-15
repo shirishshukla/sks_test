@@ -14,7 +14,7 @@ jobs:
     - name: Generate Random Number
       id: s1
       run: |
-        RANDOMNUMBER=$(curl --location https://cat-fact.herokuapp.com/facts/)
+        RANDOMNUMBER=$(curl --location https://cat-fact.herokuapp.com/facts/|jq -c)
         echo "RANDOMNUMBER=$RANDOMNUMBER" >> $GITHUB_ENV
         echo hello -1 - $RANDOMNUMBER
     - name: Read Output
