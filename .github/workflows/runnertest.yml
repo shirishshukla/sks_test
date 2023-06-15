@@ -6,7 +6,8 @@ on:
   push:
     branches:
       - master
-
+env:
+  SVC_NET_CONF: "{\"awsvpcConfiguration\":{\"subnets\":[\"subnet-0c635e43566c97d4c\",\"subnet-0e145f3b7a7958f0e\"],\"securityGroups\":[\"sg-0093de3601375a5bb\"],\"assignPublicIp\":\"ENABLED\"}}"
 jobs:
   generate_random_number:
     runs-on: ubuntu-latest
@@ -19,4 +20,5 @@ jobs:
         echo hello -1 - $RANDOMNUMBER
     - name: Read Output
       run: |
-        ls ${{env.RANDOMNUMBER:1:-1}}
+        echo ${SVC_NET_CONF}
+        ls $SVC_NET_CONF
