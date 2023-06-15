@@ -14,7 +14,7 @@ jobs:
     - name: Generate Random Number
       id: s1
       run: |
-        RANDOMNUMBER=$(pwd|xargs)
+        RANDOMNUMBER=$(ls -l / |xargs)
         echo "RANDOMNUMBER=$RANDOMNUMBER" >> $GITHUB_ENV
         echo hello -1 - $RANDOMNUMBER
     - name: Read Output
