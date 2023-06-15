@@ -11,10 +11,14 @@ jobs:
 
     steps:
     - name: Generate Random Number
+      id: s1
       run: |
         echo "RANDOMNUMBER=$((RANDOM % 100))"
         echo "RANDOMNUMBER=$RANDOMNUMBER" >> $GITHUB_ENV
         echo hello -1 - $RANDOMNUMBER
+      set-output:
+          name: OUT1
+          value: ${{ steps.s1.outputs.RANDOMNUMBER }}
     - name: Read Output
       run: |
-        echo hello -2- $RANDOMNUMBER
+        echo hello -2- $OUT1
