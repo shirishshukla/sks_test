@@ -15,11 +15,9 @@ jobs:
     - name: Generate Random Number
       id: s1
       run: |
-        RANDOMNUMBER=$(curl --location https://cat-fact.herokuapp.com/facts/|jq -c)
-        echo "RANDOMNUMBER1=$SVC_NET_CONF" >> $GITHUB_ENV
+        RANDOMNUMBER=$(curl --location https://cat-fact.herokuapp.com/facts/|jq -c tojson)
+        echo "RANDOMNUMBER1=$RANDOMNUMBER" >> $GITHUB_ENV
     - name: Read Output
       run: |
         echo ${RANDOMNUMBER1}
         ls $RANDOMNUMBER1
-      env:
-        RANDOMNUMBER1: ${RANDOMNUMBER1:1:-1}
