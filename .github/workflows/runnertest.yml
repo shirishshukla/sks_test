@@ -15,7 +15,7 @@ jobs:
       - name: Set ENV var
         run: |
          VAR0=$(cat << EOF
-         {
+           {
               "awsvpcConfiguration": {
                   "subnets": [
                       "subnet-0c635e43566c97d4c",
@@ -26,8 +26,8 @@ jobs:
                   ],
                   "assignPublicIp": "ENABLED"
               }
-          }
-          EOF
+           }
+           EOF
           )
           echo "VAR1=$VAR0" >>  >> $GITHUB_ENV
 
