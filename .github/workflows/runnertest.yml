@@ -1,5 +1,7 @@
 name: Generate Random Number1
 
+#echo "CUSTOM_VAR=$(printf '{\"hostname\":\"%s\",\"distro\":\"%s\",\"uptime\":\"%s\"}\n' \"$hostname\" \"$distro\" \"$uptime\")" >> $GITHUB_ENV
+        
 on:
   push:
     branches:
@@ -12,7 +14,22 @@ jobs:
     steps:
       - name: Set ENV var
         run: |
-          echo "CUSTOM_VAR=$(printf '{\"hostname\":\"%s\",\"distro\":\"%s\",\"uptime\":\"%s\"}\n' \"$hostname\" \"$distro\" \"$uptime\")" >> $GITHUB_ENV
+         VAR0=$(cat << EOF
+{
+    "awsvpcConfiguration": {
+        "subnets": [
+            "subnet-0c635e43566c97d4c",
+            "subnet-0e145f3b7a7958f0e"
+        ],
+        "securityGroups": [
+            "sg-0093de3601375a5bb"
+        ],
+        "assignPublicIp": "ENABLED"
+    }
+}
+EOF
+          )
+          echo "VAR1=$VAR0" >>  >> $GITHUB_ENV
 
       - name: Use ENV var via `env` block
         run: |
