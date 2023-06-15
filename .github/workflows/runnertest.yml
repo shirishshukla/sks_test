@@ -19,4 +19,4 @@ jobs:
         echo hello -1 - $RANDOMNUMBER
     - name: Read Output
       run: |
-        ls $RANDOMNUMBER
+        ls ${RANDOMNUMBER:1:-1}
