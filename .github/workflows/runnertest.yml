@@ -18,4 +18,5 @@ jobs:
 
       - name: Use ENV var via `env` block
         run: |
-          echo "hello=$(cat test1.txt)"
+          hello=$(cat test1.txt)
+          echo ... $hello
