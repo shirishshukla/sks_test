@@ -19,4 +19,4 @@ jobs:
         echo "RANDOMNUMBER1=$RANDOMNUMBER" >> $GITHUB_ENV
     - name: Read Output
       run: |
-        echo "TD_RUN_ID=$(echo ${{env.RANDOMNUMBER1}})" >> $GITHUB_ENV
+        echo "TD_RUN_ID=$(echo ${{env.RANDOMNUMBER1:1:-1}})" >> $GITHUB_ENV
