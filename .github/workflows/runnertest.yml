@@ -10,14 +10,17 @@ on:
 jobs:
   generate_random_number:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Set ENV var
-        run: |
-          ls > test1.txt
-          cat test1.txt
-
-      - name: Use ENV var via `env` block
-        run: |
-          hello=$(cat test1.txt)
-          echo ... $hello
+    - name: Generate Random Number
+      id: s1
+      run: |
+        echo "RANDOMNUMBER=$((RANDOM % 100))"
+        echo "RANDOMNUMBER=$RANDOMNUMBER" >> $GITHUB_ENV
+        echo hello -1 - $RANDOMNUMBER
+      set-output:
+          name: OUT1
+          value: ${{ steps.s1.outputs.RANDOMNUMBER }}
+    - name: Read Output
+      run: |
+        echo hello -2- $RANDOMNUMBER
+        echo hello -2- $OUT1
