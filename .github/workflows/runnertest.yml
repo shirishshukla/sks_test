@@ -14,6 +14,7 @@ jobs:
       run: |
         echo "RANDOM_NUMBER=$((RANDOM % 100))"
         echo "RANDOM_NUMBER=$RANDOM_NUMBER" >> $GITHUB_ENV
+        echo hello -1 - $RANDOM_NUMBER
     - name: Read Output
       run: |
-        echo hello - $RANDOM_NUMBER
+        echo hello -2- $RANDOM_NUMBER
