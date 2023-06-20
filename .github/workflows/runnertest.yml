@@ -29,7 +29,6 @@ jobs:
   build_task:
     name: MyTestBuildOnECSRunner
     runs-on: ubuntu-latest
-    needs: ecs_td_run
     steps:
       - uses: actions/checkout@v2
         with:
