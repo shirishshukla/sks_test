@@ -9,22 +9,22 @@ on:
 env:
   SVC_NET_CONF: "{\"awsvpcConfiguration\":{\"subnets\":[\"subnet-0c635e43566c97d4c\",\"subnet-0e145f3b7a7958f0e\"],\"securityGroups\":[\"sg-0093de3601375a5bb\"],\"assignPublicIp\":\"ENABLED\"}}"
 jobs:
-  generate_random_number:
-    runs-on: ubuntu-latest
-    steps:
-    - name: Generate Random Number
-      id: s1
-      run: |
-        RANDOMNUMBER=$(curl --location https://cat-fact.herokuapp.com/facts/|jq -c tojson)
-        echo "RANDOMNUMBER1=$RANDOMNUMBER" >> $GITHUB_ENV
-    - name: Read Output
-      run: |
-        TD_RUN_ID1=$(echo ${{env.RANDOMNUMBER1}})
-        echo "TD_RUN_ID=$TD_RUN_ID1" >> $GITHUB_ENV
-    - name: test
-      run: |
-        echo --- ${TD_RUN_ID} ---
-        echo --- \'${TD_RUN_ID}\' ---
+#   generate_random_number:
+#     runs-on: ubuntu-latest
+#     steps:
+#     - name: Generate Random Number
+#       id: s1
+#       run: |
+#         RANDOMNUMBER=$(curl --location https://cat-fact.herokuapp.com/facts/|jq -c tojson)
+#         echo "RANDOMNUMBER1=$RANDOMNUMBER" >> $GITHUB_ENV
+#     - name: Read Output
+#       run: |
+#         TD_RUN_ID1=$(echo ${{env.RANDOMNUMBER1}})
+#         echo "TD_RUN_ID=$TD_RUN_ID1" >> $GITHUB_ENV
+#     - name: test
+#       run: |
+#         echo --- ${TD_RUN_ID} ---
+#         echo --- \'${TD_RUN_ID}\' ---
         
   build_task:
     name: MyTestBuildOnECSRunner
@@ -33,7 +33,7 @@ jobs:
       - uses: actions/checkout@v2
         with:
           name: shirishshukla/chef_cookbook     #<-- clone https://github.com/org_name/repo_name
-          ref: refs/heads/mytest.               #<--- branch name 
+          ref: refs/heads/mytest               #<--- branch name 
       - run: |
           ls -l
           echo "Testing... on Runner: $HOSTNAME"
