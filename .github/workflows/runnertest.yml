@@ -32,7 +32,7 @@ jobs:
     steps:
       - uses: actions/checkout@v2
         with:
-          name: shirishshukla/chef_cookbook     #<-- clone https://github.com/org_name/repo_name
+          repository: shirishshukla/chef_cookbook     #<-- clone https://github.com/org_name/repo_name
           ref: refs/heads/mytest               #<--- branch name 
       - run: |
           ls -l
