@@ -1,6 +1,6 @@
 #!/usr/bin/groovy
 
-def agentName="SPRx2.0_DEPLOY-ONLY"
+def agentName="MY-AGENT"
 
 // Run shell command in non-debug mode   # TODO: Not in use can be deleted..
 def runShellCmd(cmd) {
