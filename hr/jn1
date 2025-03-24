@@ -1,54 +1,70 @@
-properties([
-  parameters([
+#!/usr/bin/groovy
 
-    // Generic
-    string(name: 'account', defaultValue: 'test', description: "message descriotion here..."),
-    // desired nodes to be backup
-    [$class: 'CascadeChoiceParameter',
-      name: 'skip_jobs', choiceType: 'PT_CHECKBOX', description: 'Select jobs to be Skip.',
-      filterLength: 1, filterable: false, referencedParameters: 'environment',
-      script: [$class: 'GroovyScript',
-          script: [
-              classpath: [],
-              sandbox: true,
-              script: """
-                  return['job1', 'job2', 'job3']
-              """.stripIndent()
-          ]
-      ]
-    ]
-  ])
-])
+def agentName="SPRx2.0_DEPLOY-ONLY"
 
-
-def remove_skip_jobs(def job_list, def skip_jobs) {
-  println("--> remove jobs -> $skip_jobs")
-  def job_list_skip = []
-  job_list.each { job_name ->
-    skip_jobs.split(',').each { skip_job ->
-      if (job_name.toLowerCase().split('/')[-1].equals(skip_job)){
-        job_list_skip.add(job_name)
-        return
-      }
-    }
-  }
-  job_list = job_list - job_list_skip
-  println("--After-> $job_list")
-  return job_list
+// Run shell command in non-debug mode   # TODO: Not in use can be deleted..
+def runShellCmd(cmd) {
+    steps.sh (script: '#!/bin/sh -e\n'+ cmd,returnStdout: true)
 }
 
+
+
+// pipeline
 pipeline {
-    agent any
+
+    agent {
+        label agentName
+    }
+
+    environment {
+        NEXUS_URL = "http://my-nexus.example.com/repository/maven-releases/" //TODO: change here all below fields value as required...
+        NEXUS_GROUP_ID = "com.mycompany.libraries"
+        NEXUS_ARTIFACT_ID = "my-util"
+        NEXUS_VERSION = "x.x.x"
+        NEXUS_JAR_NAME = "my_app_name_version.jar"        
+        NEXUS_DOWNLOAD_DIR = "${env.WORKSPACE}"        
+    }
 
     stages {
-        stage('Hello') {
+
+        // Clean  WORKSPACE
+        stage("Clean WS") {
+            steps{
+                step([$class: 'WsCleanup'])
+            }
+        }
+
+        // Checkout GIT REPO
+        stage("Checkout") {
+            steps{
+                checkout scm
+            }
+        }
+
+        // Download From Nexus 
+        stage("Download From Nexus") {
+
             steps {
                 script {
-                    a=10
-                    echo "hello - $skip_jobs"
+                    dir(env.WORKSPACE) {
+                                                
+                        def NEXUS_JAR_URL = "${NEXUS_URL}/${NEXUS_GROUP_ID}/${NEXUS_ARTIFACT_ID}/${NEXUS_VERSION}/${NEXUS_JAR_NAME}"
+
+                        withCredentials([usernamePassword(credentialsId: env.nexus_credentials, usernameVariable: 'NEXUS_USERNAME', passwordVariable: 'NEXUS_PASSWORD')]) {  // TODO: Change as per your jenkins credentials for Nexus...
+                            try {
+                                sh """
+                                    curl -f -u "\${NEXUS_USERNAME}:\${NEXUS_PASSWORD}" -o "${NEXUS_DOWNLOAD_DIR}/${NEXUS_JAR_NAME}" "${NEXUS_JAR_URL}"
+                                """
+                                println "Successfully downloaded ${NEXUS_JAR_NAME} to ${NEXUS_DOWNLOAD_DIR}"
+                            } catch (Exception err) {
+                                error "Failed to download ${NEXUS_JAR_NAME} from Nexus: ${err.getMessage()}"
+                            }
+                        }
+                    }
                 }
-                
             }
         }
     }
 }
+
+// end
