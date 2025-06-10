@@ -1,70 +1,381 @@
 #!/usr/bin/groovy
 
-def agentName="MY-AGENT"
+def getEMail_DL(def emailTo, def emailDLPropsFile){
+    emailDLProperties=readProperties file: emailDLPropsFile
+    emailDL=emailDLProperties.get(emailTo)
+    emailDL
+}
 
-// Run shell command in non-debug mode   # TODO: Not in use can be deleted..
+def sendBadServicesEmail(def emailList, def FailedServicesContent){
+    emailext mimeType: 'text/html',
+    body: FailedServicesContent,
+    subject: 'Failed Services: ${ENVIRONMENT}',
+    to: emailList
+
+    println("E-Mail sent")
+}
+
+def copy_from_branch(def branchName,def fileName){
+   println("Coyping file ${fileName} from ${branchName}")
+   try {
+       sh "> ${fileName}"
+       sh "git checkout remotes/origin/${branchName} -- ${fileName}"
+   } catch (err) { 
+       println('Failed either file is empty or not exit, creating blank file')
+       sh "> ${fileName}"
+   }
+}
+
+// Run shell command in non-debug mode
 def runShellCmd(cmd) {
     steps.sh (script: '#!/bin/sh -e\n'+ cmd,returnStdout: true)
 }
 
+// Download file from remote url
+def downloadFromUrl(def srcURL, def outFile) {
+    println("Downloding from url ${srcURL} to ${outFile}")
+    try {
+        def response = httpRequest url: srcURL, outputFile: outFile
+        echo "Downloaded file status: ${response.status}"
+        # CMD1 = "wget -O ${outFile} ${srcURL}")
+        # CMD2 = "curl -L -o ${outFile} ${srcURL}")
+        # runShellCmd(CMD1)
+   } catch (err) { 
+       println("Failed to download file ${err}")
+   }
+   println('Successfully download file')
+}
 
 
 // pipeline
-pipeline {
+pipeline{
+    environment{
+        def ENV="${ENVIRONMENT}"
+        def TRIGGER_SANITY="${TRIGGERSANITY}"
+        def swaggerServicesFile="SWAGGER-SERVICES-LIST.txt"
+        def swaggerInternalProxyInfoFile="SWAGGER_INTERNAL_PROXY.properties"
+        def credentialId='3e38e78b-df56-4861-95f1-f084e03f93f5'
+        def excludeSchedulersHeader=''
+        def emailDLPropertiesFile="E-MAIL_DL_SUCCESS.properties"
+        def SWAGGER_HTML_REPORT="${ENVIRONMENT}_SWAGGER_HTML_REPORT"
+        def failedServicesReportFileName="FAILED_HEALTH-CHECK_SERVICES.csv"
 
-    agent {
-        label agentName
+        def LogSrcURL="https://sprx2-platform-reports.cvshealth.com:8000/CTE_VERSIONS.log"
+        def LogDestOutFile="_${ENVIRONMENT}.log"
     }
 
-    environment {
-        NEXUS_URL = "http://my-nexus.example.com/repository/maven-releases/" //TODO: change here all below fields value as required...
-        NEXUS_GROUP_ID = "com.mycompany.libraries"
-        NEXUS_ARTIFACT_ID = "my-util"
-        NEXUS_VERSION = "x.x.x"
-        NEXUS_JAR_NAME = "my_app_name_version.jar"        
-        NEXUS_DOWNLOAD_DIR = "${env.WORKSPACE}"        
+    agent{
+            label "SPRx2.0_DEPLOY-ONLY"
     }
 
-    stages {
+    stages{
 
-        // Clean  WORKSPACE
-        stage("Clean WS") {
+        stage("Clean WS"){
             steps{
                 step([$class: 'WsCleanup'])
             }
         }
 
-        // Checkout GIT REPO
-        stage("Checkout") {
+        stage("Checkout and Preperation"){
             steps{
                 checkout scm
             }
         }
 
-        // Download From Nexus 
-        stage("Download From Nexus") {
-
-            steps {
-                script {
-                    dir(env.WORKSPACE) {
-                                                
-                        def NEXUS_JAR_URL = "${NEXUS_URL}/${NEXUS_GROUP_ID}/${NEXUS_ARTIFACT_ID}/${NEXUS_VERSION}/${NEXUS_JAR_NAME}"
-
-                        withCredentials([usernamePassword(credentialsId: env.nexus_credentials, usernameVariable: 'NEXUS_USERNAME', passwordVariable: 'NEXUS_PASSWORD')]) {  // TODO: Change as per your jenkins credentials for Nexus...
-                            try {
-                                sh """
-                                    curl -f -u "\${NEXUS_USERNAME}:\${NEXUS_PASSWORD}" -o "${NEXUS_DOWNLOAD_DIR}/${NEXUS_JAR_NAME}" "${NEXUS_JAR_URL}"
-                                """
-                                println "Successfully downloaded ${NEXUS_JAR_NAME} to ${NEXUS_DOWNLOAD_DIR}"
-                            } catch (Exception err) {
-                                error "Failed to download ${NEXUS_JAR_NAME} from Nexus: ${err.getMessage()}"
+        stage("Initialization"){
+            steps{
+                script{
+                    println("ENVIRONMENT: " + env.ENV)
+                    // SENT EMAIL TO
+                    SUCCESS_EMAIL_LIST = null
+                    emailList = null
+                    if(SEND_EMAIL_TO) {
+                        SEND_EMAIL_TO.split(',').each { emailTo ->
+                            if (emailTo.toLowerCase().contains('@cvshealth.com')) {
+                              emailList = emailTo
+                            } else {
+                              emailList = getEMail_DL(emailTo, emailDLPropertiesFile)
                             }
-                        }
+                            if(SUCCESS_EMAIL_LIST){
+                                SUCCESS_EMAIL_LIST = SUCCESS_EMAIL_LIST + ',' + emailList
+                            } else {
+                                SUCCESS_EMAIL_LIST = emailList
+                            }
+                        } // loop end
+                    }
+                    if (!SUCCESS_EMAIL_LIST){ // if email list if blank then use this default list
+                        SUCCESS_EMAIL_LIST = getEMail_DL('PLATFORM_TEAM', emailDLPropertiesFile)
+                    }
+                    if(!SUCCESS_EMAIL_LIST) {
+                       error('email to is blank')
                     }
                 }
             }
         }
+
+        stage("Swagger Health Checks"){
+            steps{
+                script{
+                    serviceFileGitRepoBranch = 'swagger-services'
+                    schedulerServiceFile     = 'swagger-schedulers.txt'
+                    excludeSchedulerServiceFile  = 'swagger-exclude-schedulers.txt'
+
+                    // Copy files from branch to here
+                    copy_from_branch('swagger-proxy-urls', swaggerInternalProxyInfoFile)     
+
+                    // convert custom services to list
+                    customServicesList=CUSTOM_SERVICES.split()
+                    println("Custom Services List:"+customServicesList)
+                    if(customServicesList.length > 0){
+                        env.SERVICES='CUSTOM_SERVICES'
+                        CMD = '''
+                           > ${swaggerServicesFile}
+                          for svc in `echo ${CUSTOM_SERVICES}`; do 
+                             echo $svc >> ${swaggerServicesFile}
+                          done
+                        '''
+                       runShellCmd(CMD)
+                    }
+                    // Exclude list from repo
+                    else if (SERVICES.equals("ONLY SCHEDULERS")){
+                        copy_from_branch(serviceFileGitRepoBranch, schedulerServiceFile)
+                        CMD = """
+                            cat ${schedulerServiceFile} | sort | uniq > ${swaggerServicesFile}
+                        """
+                    } else if (SERVICES.equals("EXCLUDE SCHEDULERS")){
+                        copy_from_branch(serviceFileGitRepoBranch, excludeSchedulerServiceFile)
+                        CMD = """
+                            cat ${excludeSchedulerServiceFile} | sort | uniq > ${swaggerServicesFile}
+                        """
+                    } else if (SERVICES.equals("ALL SERVICES")){
+                        copy_from_branch(serviceFileGitRepoBranch, schedulerServiceFile)
+                        copy_from_branch(serviceFileGitRepoBranch, excludeSchedulerServiceFile)
+                        CMD = """
+                            cat ${schedulerServiceFile} ${excludeSchedulerServiceFile} | sort | uniq > ${swaggerServicesFile}
+                        """
+                    } else {
+                        error("Not a supported $SERVICES")
+                    }
+                    runShellCmd(CMD)
+
+                    // If prod trim undeployed services
+                    if ENV.toLowerCase().contains('prod') {
+                        downloadFromUrl(LogSrcURL, LogDestOutFile)
+                        // Exclude which are not present
+                        CMD = """
+                          tempFile=${swaggerServicesFile}.temp
+                          cp ${swaggerServicesFile} $tempFile
+                          > ${swaggerServicesFile}  # reset 
+                          for svc in $tempFile; do
+                            found=`grep -iw $svc ${LogDestOutFile}`
+                            svcName=`echo $found | awk -F: '{print $1}'|xargs`
+                            svcVer=`echo $found | awk -F: '{print $NF}'|xargs`
+                            if $svcVer != 'NA';then
+                                echo $svcName >> ${swaggerServicesFile} # svc found in log
+                            else
+                                echo "Skipping Service ${svcName} Not Found in log."
+                            fi
+                          done
+                        """
+                        runShellCmd(CMD)
+                    }
+
+                    // Run script
+                    def health_check_command="sh main_swagger_health_check.sh ${ENVIRONMENT} ${swaggerServicesFile} ${swaggerInternalProxyInfoFile}"
+                    String swaggerHealthReport=sh (
+                        script: health_check_command,
+                        returnStdout: true
+                    ).trim()
+
+                    println("SWAGGER HEALTH REPORT: " + swaggerHealthReport)
+                }
+            }
+        }
+          
+        stage("Generate Report"){
+            steps{
+                script{
+                    def report_generate_command="sh GENERATE_HTML-TABLE_FROM_CSV.sh ${ENVIRONMENT}_SWAGGER_HELATH_CHECK.csv"
+
+                    table_content=sh (
+                        script: report_generate_command,
+                        returnStdout: true
+                    ).trim()
+
+                    CONTENT="""
+                            <html>
+                            <style>
+                            .tg  {border-collapse:collapse;border-spacing:0;}
+                            .tg td{font-family:'Calibri';font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:black;}
+                            .tg th{font-family:'Calibri';font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:black;text-align: center;}
+                            .tg .tg-0pky{border-color:inherit;text-align:left;vertical-align:top}
+                                pre, ul, li, body {
+                                        font-family: 'Calibri';
+                                        font-size: 12px;
+                                    }
+                                table {
+                                        font-family: 'Calibri';
+                                        font-size: 14px;
+                                        text-align: center;
+                                    }
+                                .par {
+                                        font-family: 'Calibri';
+                                        font-size: 12px;
+                                    }
+                                .title {
+                                            font-family: 'Rockwell Extra Bold';
+                                            font-size: 20px;
+                                            color:red;
+                                            background-color: gold;
+                                            text-align: center;
+                                        }
+                                .foot {
+                                            font-family: 'Calibri';
+                                            font-size: 15px;
+                                            color:black;
+                                            background-color: #ffad99;
+                                            text-align: center;
+                                       }
+                                </style>
+                                <body>
+                                <h3 class='title'>${ENVIRONMENT} AUTOMATIC SWAGGER HEALTH CHECK - ${SERVICES} </h3>
+                                <center>
+                                <!-- <b>Note:</b> 'specialty-adjudication-scheduler' service is under retirement, Please ignore its result. -->
+                            """ +
+                            table_content +
+                            """
+                            <br></br>
+                            </center>
+
+                            <br></br>
+                                     <p class='foot'>[ This is an auto generated email, please do not reply. If you have any queries, please email to
+                                     <a href='mailto:specialty_platform_engg@CVSHealth.com?subject=${ENVIRONMENT} SWAGGER HEALTH CHECK-UP'>SPP Platform Engg</a>  ] </p>
+                                </body>
+                            </html>
+                            """
+                }
+            }
+        }
+    }
+
+    post{
+        failure {
+            script{
+                // FAILED_EMAIL_LIST="Harika.Paimagam@CVSHealth.com"
+                FAILED_EMAIL_LIST="Nagaraju.Islavath@CVSHealth.com,Harika.Paimagam@CVSHealth.com,vishwanath.manchala@cvshealth.com,sivaramakrishna.bolla@cvshealth.com,UdayaBhaskar.Aravapalli@CVSHealth.com"
+                println("!!!!!!!!!!!!!!!!!!!!!  FAILED  FAILED  FAILED  FAILED  FAILED  FAILED !!!!!!!!!!!!!!!!!!!!!")
+
+                emailext mimeType: 'text/html',
+                body: 'SWAGGER CHECK FAILED!!',
+                subject: '--- FAILED --- SWAGGER HEALTH CHECK REPORT-${ENVIRONMENT}',
+                to: FAILED_EMAIL_LIST
+            }
+        }
+
+        success {
+            script{
+                emailext mimeType: 'text/html',
+                body: CONTENT,
+                subject: 'SWAGGER HEALTH CHECK REPORT: ${ENVIRONMENT}',
+                to: SUCCESS_EMAIL_LIST
+
+                def size=sh(script: "stat -c%s $failedServicesReportFileName", returnStdout:true).trim()
+                int numOfFailedServices=Integer.parseInt(size)
+
+                if(numOfFailedServices > 0){
+                    println("Number of Bad Services: "+ numOfFailedServices)
+
+                    tableHeader="S.NO.,RESULT,SERVICE NAME,STATUS CODE,SWAGGER URL"
+                    sh "sed -i -e \"1i$tableHeader\" \"$failedServicesReportFileName\""
+
+                    def failed_report_generate_command="sh GENERATE_HTML-TABLE_FROM_CSV.sh $failedServicesReportFileName"
+
+                    failedServices_tableContent=sh (
+                        script: failed_report_generate_command,
+                        returnStdout: true
+                    ).trim()
+
+                    failedServicesHTMLContent="""
+                            <html>
+                            <style>
+                            .tg  {border-collapse:collapse;border-spacing:0;}
+                            .tg td{font-family:'Calibri';font-size:14px;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:black;}
+                            .tg th{font-family:'Calibri';font-size:14px;font-weight:normal;padding:10px 5px;border-style:solid;border-width:1px;overflow:hidden;word-break:normal;border-color:black;text-align: center;}
+                            .tg .tg-0pky{border-color:inherit;text-align:left;vertical-align:top}
+                                pre, ul, li, body {
+                                        font-family: 'Calibri';
+                                        font-size: 12px;
+                                    }
+                                table {
+                                        font-family: 'Calibri';
+                                        font-size: 14px;
+                                        text-align: center;
+                                    }
+                                .par {
+                                        font-family: 'Calibri';
+                                        font-size: 12px;
+                                    }
+                                .title {
+                                            font-family: 'Rockwell Extra Bold';
+                                            font-size: 20px;
+                                            color:red;
+                                            background-color: gold;
+                                            text-align: center;
+                                        }
+                                .foot {
+                                            font-family: 'Calibri';
+                                            font-size: 15px;
+                                            color:black;
+                                            background-color: #ffad99;
+                                            text-align: center;
+                                       }
+                                </style>
+                                <body>
+                                <h3 class='title'>${ENVIRONMENT} SWAGGER HEALTH CHECK FAILED SERVICES - ${SERVICES}</h3>
+                                <center>
+                            """ +
+                            failedServices_tableContent +
+                            """
+                            <br></br>
+                            </center>
+
+                            <br></br>
+                                     <p class='foot'>[ This is an auto generated email, please do not reply. If you have any queries, please email to
+                                     <a href='mailto:specialty_platform_engg@CVSHealth.com?subject=${ENVIRONMENT} SWAGGER HEALTH CHECK-UP'>SPP Platform Engg</a>  ] </p>
+                                </body>
+                            </html>
+                            """
+                    sendBadServicesEmail("vishwanath.manchala@cvshealth.com,sivaramakrishna.bolla@cvshealth.com", failedServicesHTMLContent)
+                }
+                /* //Disabling Sanity trigger due to Sanity QA service acc issue */
+                if(ENVIRONMENT.startsWith("SIT") && TRIGGER_SANITY.equals("YES")){
+                    println("Auto Sanity Trigger is YES for "+ ENVIRONMENT)
+                    /*
+                    def handle = triggerRemoteJob(job: 'https://jenkins.specialty.cvs.com/job/SPRX2.0_'+ENVIRONMENT+'_SANITY_PLAYWRIGHT/',
+                                                  ,auth: TokenAuth(apiToken: '11230b17f6725695da66b2efdf5e7ae276',userName: 'SVCS_SpecialtyQAabc')
+                                                  ,shouldNotFailBuild: true
+                                                  ,useCrumbCache: true
+                                                  ,useJobInfoCache: true
+                                                  ,blockBuildUntilComplete:false)
+                    def status = handle.getBuildStatus()
+                    println("Handler status is: "+ status)
+                    */
+
+                if(ENVIRONMENT=="SIT-1")
+                    sh 'curl -v -u "SVCS_SpecialtyQA:11ed8090fa2c37114292b00369d7132776" -X POST "https://jenkins.specialty.cvs.com/job/SPRX2.0_SIT-1_SANITY_PLAYWRIGHT/build?token=abc123456"'
+
+                else if(ENVIRONMENT=="SIT-2")
+                    sh 'curl -v -u "SVCS_SpecialtyQA:11ed8090fa2c37114292b00369d7132776" -X POST "https://jenkins.specialty.cvs.com/job/SPRX2.0_SIT-2_SANITY_PLAYWRIGHT/build?token=abc123456"'
+
+                else if(ENVIRONMENT=="SIT-3")
+                    sh 'curl -v -u "SVCS_SpecialtyQA:11ed8090fa2c37114292b00369d7132776" -X POST "https://jenkins.specialty.cvs.com/job/SPRX2.0_SIT-3_SANITY_PLAYWRIGHT/build?token=abc123456"'
+                }
+            }
+        }
+        
+        always {
+                println('Archiveingall *.csv file')
+                archiveArtifacts artifacts: '*.csv'
+        }
     }
 }
-
-// end
