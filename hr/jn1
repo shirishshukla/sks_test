@@ -159,19 +159,19 @@ pipeline{
                     runShellCmd(CMD)
 
                     // If prod trim undeployed services
-                    if ENV.toLowerCase().contains('prod') {
+                    if (ENV.toLowerCase().contains('prod')) {
                         downloadFromUrl(LogSrcURL, LogDestOutFile)
                         // Exclude which are not present
                         CMD = """
                           tempFile=${swaggerServicesFile}.temp
-                          cp ${swaggerServicesFile} $tempFile
+                          cp ${swaggerServicesFile} \$tempFile
                           > ${swaggerServicesFile}  # reset 
-                          for svc in $tempFile; do
-                            found=`grep -iw $svc ${LogDestOutFile}`
-                            svcName=`echo $found | awk -F: '{print $1}'|xargs`
-                            svcVer=`echo $found | awk -F: '{print $NF}'|xargs`
-                            if $svcVer != 'NA';then
-                                echo $svcName >> ${swaggerServicesFile} # svc found in log
+                          for svc in `cat \$tempFile`; do
+                            found=`grep -iw \$svc ${LogDestOutFile}`
+                            svcName=`echo \$found | awk -F: '{print \$1}'|xargs`
+                            svcVer=`echo \$found | awk -F: '{print \$NF}'|xargs`
+                            if [[ "\$svcVer" != 'NA' ]];then
+                                echo \$svcName >> ${swaggerServicesFile} # svc found in log
                             else
                                 echo "Skipping Service ${svcName} Not Found in log."
                             fi
