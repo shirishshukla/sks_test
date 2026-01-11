@@ -1,0 +1,153 @@
+#!/bin/bash
+
+# Parameters with default values
+uidToken=""
+init=false
+env=""
+homedir=""
+akeyless_token_file="/appl/tkn/configurations.txt"
+akeyless_token_key="akeyless-tkn"
+
+
+## Variables 
+<<over WH>>
+
+# Email notifications 
+<<Over WH>>
+
+# --- Functions ---
+
+show_help() {
+    echo "================================================================"
+    echo " AKEYLESS UNIVERSAL IDENTITY ROTATION SCRIPT"
+    echo "================================================================"
+    echo "Usage:"
+    echo "  Initial Setup:  $0 -init -env [Prod|Non-Prod] -homedir [path]"
+    echo "  Manual Rotate:  $0 -env [Prod|Non-Prod] -homedir [path]"
+    echo ""
+    echo "Options:"
+    echo "  -init           Initialize the process, authenticates, and schedules cron."
+    echo "  -env            Specify 'Prod' or 'Non-Prod'."
+    echo "  -homedir        Path where .vault-token will be stored (e.g., /home/service_acct)."
+    echo "  -uidToken       (Optional) Provide the starter token via CLI instead of prompt."
+    echo "  -h, --help      Display this help message."
+    echo ""
+    echo "Note: When -init is used, a crontab entry is automatically created"
+    echo "to rotate the token every 10 minutes."
+    echo "================================================================"
+}
+
+# Send email notification
+send_email() {
+    local email_to="${1:-$notifyEmailTOFail}"
+    echo "$notifyEmailSubBody" | mail -s "$notifyEmailSubFail" -r "$notifyEmailFrom" -c "$notifyEmailCC" "$email_to"
+}
+
+# Check prerequisites
+for cmd in curl jq mail; do
+    if ! command -v $cmd &> /dev/null; then
+        echo "Error: Required dependency '$cmd' is not installed."
+        exit 1
+    fi
+done
+
+# Parse arguments 
+if [[ "$#" -eq 0 ]]; then show_help; exit 0; fi
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        -uidToken) uidToken="$2"; shift ;;
+        -init)     init=true ;;
+        -env)      env="$2"; shift ;;
+        -homedir)  homedir="$2"; shift ;;
+        -h|--help) show_help; exit 0 ;;
+        *)         echo "Unknown option: $1"; show_help; exit 1 ;;
+    esac
+    shift
+done
+
+# --- Logic Flow --- #
+
+# >>>>>>>>> Initialize [Init) <<<<<<<<<< #
+if [ "$init" = true ]; then
+    if [[ -z "$env" || -z "$homedir" ]]; then
+        echo "Error! -env and -homedir are required for initialization."
+        show_help
+        exit 1
+    fi
+
+    case "$env" in
+        "Non-Prod") proxy_url="${proxy_url_non_prod}"; auth_url="${auth_url_non_prod}" ;;
+        "Prod")     proxy_url="${proxy_url_prod}";     auth_url="${auth_url_prod}" ;;
+        *)          echo "Invalid environment. Use 'Prod' or 'Non-Prod'."; exit 1 ;;
+    esac
+
+    # Prompt for secrets if not provided
+    [ -z "$accessId" ] && read -p "Access Id: " accessId
+    [ -z "$uidToken" ] && read -sp "Universal ID Token: " uidToken && echo ""
+
+    token_file="$homedir/.vault-token"
+
+    # API Call to authenticate
+    response=$(curl -s -X POST "$auth_url" \
+        -H "Content-Type: application/json" \
+        -d "{\"access-type\": \"universal_identity\", \"uid_token\": \"$uidToken\", \"access-id\": \"$accessId\"}")
+
+    token_check=$(echo "$response" | jq -r '.token // empty')
+
+    if [ -n "$token_check" ]; then
+        echo -n "$uidToken" > "$token_file"
+        
+        # Scheduling
+        script_path="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
+        cron_job="*/10 * * * * $script_path -env \"$env\" -homedir \"$homedir\" >> \"$homedir/akeyless_rotation.log\" 2>&1"
+        
+        (crontab -l 2>/dev/null | grep -v -F "$script_path"; echo "$cron_job") | crontab -
+        
+        echo "Successfully initiated. Cron job scheduled to run every 10 mins."
+    else
+        echo "Auth failed. Response: $response"
+        send_email
+    fi
+
+## >>>>>>>>> Rotation Logic (Non-Init) <<<<<<<<<< #
+else 
+    case "$env" in
+        "Non-Prod") proxy_url="${proxy_url_non_prod}" ;;
+        "Prod")     proxy_url="${proxy_url_prod}" ;;
+        *)          echo "Error: Env must be Prod or Non-Prod"; exit 1 ;;
+    esac
+
+    token_file="$homedir/.vault-token"
+    if [ ! -f "$token_file" ]; then
+        echo "Token file missing at $token_file. Run with -init first."
+        exit 1
+    fi
+
+    cur_token=$(cat "$token_file")
+    encoded_token="${cur_token//+/%2b}"
+
+    res=$(curl -s "$proxy_url" -d "cmd=uid-rotate-token&uid-token=$encoded_token" | grep "ROTATED TOKEN:" | xargs)
+
+    if [ -z "$res" ]; then
+        send_email
+    else
+        new_token=$(echo "$res" | sed 's/.*ROTATED TOKEN: //; s/[\[\]]//g')
+        echo "Writing token to $token_file_new"
+        [ -n "$new_token" ] && echo -n "$new_token" > "$token_file"
+        
+        # Update the token in the configuration file        
+        [[ ! -f $akeyless_token_file ]] && echo "$akeyless_token_file not exist" && send_email && exit 1
+
+        if grep -q "${akeyless_token_key}:" "${akeyless_token_file}" 2>/dev/null; then
+            sed -i "s|${akeyless_token_key}:.*|${akeyless_token_key}: $new_token|" "${akeyless_token_file}"
+            echo "Updated existing $akeyless_token_key in file ${akeyless_token_file}"
+        else
+            # Append the key if it doesn't exist
+            echo "${akeyless_token_key}: $new_token" >> "${akeyless_token_file}"
+            echo "Added new $akeyless_token_key to ${akeyless_token_file}"
+        fi
+    fi
+fi
+
+## ** END ** ##
